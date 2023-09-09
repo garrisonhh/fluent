@@ -1,0 +1,10 @@
+.{
+    .name = "fluent-parser",
+    .version = "0.0.0",
+    .dependencies = .{
+        .zighh = .{
+            .url = "https://github.com/garrisonhh/zighh/tarball/b9642e4d38f2c00031a5c9ace54a3f506e171fd2",
+            .hash = "1220b99394cb196018c39aab46dccf37a920d33e4cafa488890c797fc2481c75f090",
+        },
+    },
+}
