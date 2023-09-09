@@ -18,6 +18,7 @@ pub fn main() !void {
 
     const text =
         \\hello (a b c)
+        \\123 -123 +123 123.456 -123.456 +123.456
     ;
 
     try debugLex(text, stdout);

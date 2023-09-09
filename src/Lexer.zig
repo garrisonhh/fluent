@@ -11,10 +11,19 @@ pub const Token = struct {
     pub const Tag = enum {
         ident,
         int,
+        real,
 
-        // symbols
         lparen,
         rparen,
+        lcurly,
+        rcurly,
+
+        colon,
+        comma,
+        minus,
+        plus,
+        star,
+        slash,
     };
 
     tag: Tag,
@@ -55,11 +64,15 @@ fn accept(self: *Self, c: Codepoint) void {
 // codepoint classification ====================================================
 
 fn isIdentStart(c: Codepoint) bool {
-    return c.isAlpha() or c.c == '-';
+    return c.isAlpha();
 }
 
 fn isIdentTail(c: Codepoint) bool {
     return c.isAlpha() or c.c == '-' or c.isDigit(10);
+}
+
+fn isDecimal(c: Codepoint) bool {
+    return c.isDigit(10);
 }
 
 // tokenization ================================================================
@@ -75,8 +88,16 @@ const SingleCodepointSymbol = struct {
     }
 
     const list = [_]Scs{
+        make("{", .lparen),
+        make("}", .rparen),
         make("(", .lparen),
         make(")", .rparen),
+        make(":", .colon),
+        make(",", .comma),
+        make("-", .minus),
+        make("+", .plus),
+        make("*", .star),
+        make("/", .slash),
     };
 };
 
@@ -94,13 +115,7 @@ pub fn nextToken(self: *Self) Error!?Token {
     const start_index = self.index();
     const start_ch = try self.peek() orelse return null;
 
-    const tag: Token.Tag = for (SingleCodepointSymbol.list) |scs| {
-        // single codepoint symbols
-        if (start_ch.eql(scs.c)) {
-            self.accept(start_ch);
-            break scs.tag;
-        }
-    } else if (isIdentStart(start_ch)) tok: {
+    const tag: Token.Tag = if (isIdentStart(start_ch)) tok: {
         // identifiers
         self.accept(start_ch);
         while (try self.peek()) |inner_ch| {
@@ -109,7 +124,36 @@ pub fn nextToken(self: *Self) Error!?Token {
         }
 
         break :tok .ident;
+    } else if (isDecimal(start_ch)) tok: {
+        self.accept(start_ch);
+
+        // integral
+        while (try self.peek()) |inner_ch| {
+            if (!isDecimal(inner_ch)) break;
+            self.accept(inner_ch);
+        }
+
+        const dot_ch = try self.peek() orelse {
+            break :tok .int;
+        };
+        if (dot_ch.c != '.') break :tok .int;
+        self.accept(dot_ch);
+
+        // fractional
+        while (try self.peek()) |inner_ch| {
+            if (!isDecimal(inner_ch)) break;
+            self.accept(inner_ch);
+        }
+
+        break :tok .real;
+    } else tok: for (SingleCodepointSymbol.list) |scs| {
+        // single codepoint symbols
+        if (start_ch.eql(scs.c)) {
+            self.accept(start_ch);
+            break :tok scs.tag;
+        }
     } else {
+        std.debug.print("invalid input: `{}`\n", .{start_ch});
         return Error.InvalidInput;
     };
 
