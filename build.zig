@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const common = b.dependency("zighh", .{}).module("common");
+    const blox = b.dependency("blox", .{}).module("blox");
 
     // exe
     const exe = b.addExecutable(.{
@@ -15,6 +16,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.addModule("common", common);
+    exe.addModule("blox", blox);
 
     b.installArtifact(exe);
 

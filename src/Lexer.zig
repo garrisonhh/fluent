@@ -2,16 +2,20 @@ const std = @import("std");
 const com = @import("common");
 const Codepoint = com.utf8.Codepoint;
 
-const LexError = error { InvalidInput };
+const LexError = error{InvalidInput};
 pub const Error =
     Codepoint.ParseError ||
     LexError;
 
 pub const Token = struct {
+    const Self = @This();
+
     pub const Tag = enum {
         ident,
         int,
         real,
+
+        def,
 
         lparen,
         rparen,
@@ -29,6 +33,19 @@ pub const Token = struct {
     tag: Tag,
     start: u32,
     stop: u32,
+
+    pub fn format(
+        self: Self,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) @TypeOf(writer).Error!void {
+        try writer.print("<{s} {d}:{d}>", .{
+            @tagName(self.tag),
+            self.start,
+            self.stop,
+        });
+    }
 };
 
 const Lexer = @This();
@@ -44,7 +61,7 @@ pub fn init(text: []const u8) Lexer {
 }
 
 pub fn slice(self: Lexer, tok: Token) []const u8 {
-    return self.iter.text[tok.start .. tok.stop];
+    return self.iter.text[tok.start..tok.stop];
 }
 
 // forwarded codepoint iterator ================================================
@@ -82,12 +99,14 @@ const Keyword = struct {
     const Self = @This();
 
     str: []const u8,
+    tag: Token.Tag,
 
-    fn make(str: []const u8) Self {
-        return .{ .str = str };
+    fn make(str: []const u8, tag: Token.Tag) Self {
+        return .{ .str = str, .tag = tag };
     }
 
     const list = [_]Keyword{
+        make("def", .def),
     };
 };
 
@@ -171,6 +190,13 @@ fn lex(self: *Lexer) Error!?Token {
             self.acceptC(inner_ch);
         }
 
+        const text = self.iter.text[start_index..self.index()];
+        for (Keyword.list) |kw| {
+            if (std.mem.eql(u8, kw.str, text)) {
+                break :tok kw.tag;
+            }
+        }
+
         break :tok .ident;
     } else if (isDecimal(start_ch)) tok: {
         self.acceptC(start_ch);
@@ -242,4 +268,9 @@ pub fn peekIndex(self: *Lexer, n: usize) Error!?Token {
     }
 
     return self.cache.get(n);
+}
+
+pub fn accept(self: *Lexer, token: Token) void {
+    std.debug.assert(std.meta.eql(token, self.cache.get(0)));
+    self.cache.advance();
 }
