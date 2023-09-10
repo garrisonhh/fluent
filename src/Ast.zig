@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
 const com = @import("common");
 const blox = @import("blox");
 
@@ -39,11 +40,13 @@ pub const Expr = union(enum) {
         expr: Node,
     };
 
+    unit,
     ident: []const u8,
     int: u64,
     real: f64,
 
     parens: Node,
+    call: []const Node,
     unary: Unary,
     binary: Binary,
     def: Def,
@@ -51,6 +54,7 @@ pub const Expr = union(enum) {
 
     fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
+            .unit,
             .int,
             .real,
             .parens,
@@ -59,7 +63,10 @@ pub const Expr = union(enum) {
             .def,
             => {},
 
-            inline .ident, .program => |slice| ally.free(slice),
+            inline .ident,
+            .call,
+            .program,
+            => |slice| ally.free(slice),
         }
     }
 };
@@ -106,6 +113,8 @@ fn renderFieldData(
 ) RenderError!blox.Div {
     const ally = mason.ally;
     return switch (T) {
+        void => try mason.newPre("", .{}),
+
         // enums
         UnaryOp,
         BinaryOp,
@@ -117,24 +126,18 @@ fn renderFieldData(
             var divs = std.ArrayList(blox.Div).init(ally);
             defer divs.deinit();
 
-            if (value.len == 0) {
-                try divs.append(try mason.newPre("{}", .{}));
-            } else {
-                for (value, 0..) |node, i| {
-                    const leader = if (i == 0) "{ " else ", ";
-                    try divs.append(try mason.newBox(&.{
-                        try mason.newPre(leader, .{}),
-                        try self.renderNode(mason, node),
-                    }, .{ .direction = .right }));
-                }
-
-                try divs.append(try mason.newPre("}", .{}));
+            for (value) |node| {
+                try divs.append(try self.renderNode(mason, node));
             }
 
             break :nodes try mason.newBox(divs.items, .{});
         },
 
-        else => unreachable,
+        else => {
+            if (builtin.mode == .Debug) {
+                std.debug.panic("bad field data type: `{s}`", .{@typeName(T)});
+            } else unreachable;
+        },
     };
 }
 
@@ -154,6 +157,11 @@ pub fn renderNode(
 
     return switch (expr) {
         // literals
+        .unit => try mason.newBox(&.{
+            tag,
+            space,
+            try mason.newPre("()", .{ .fg = theme.data }),
+        }, .{ .direction = .right }),
         .ident => |ident| try mason.newBox(&.{
             tag,
             space,
@@ -173,6 +181,7 @@ pub fn renderNode(
 
         // containers
         inline .parens,
+        .call,
         .unary,
         .binary,
         .def,
@@ -181,7 +190,9 @@ pub fn renderNode(
             const Data = @TypeOf(data);
             const info = @typeInfo(Data);
 
-            const data_div = if (comptime info == .Struct) data: {
+            const data_div = if (Data != Node and
+                comptime info == .Struct)
+            data: {
                 var fields = std.ArrayList(blox.Div).init(ally);
                 defer fields.deinit();
 
@@ -192,11 +203,18 @@ pub fn renderNode(
                         @field(data, field.name),
                     );
 
-                    try fields.append(try mason.newBox(&.{
+                    const field_name = try mason.newBox(&.{
                         try mason.newPre(field.name, .{ .fg = theme.field }),
-                        try mason.newPre(": ", .{}),
-                        field_data,
-                    }, .{ .direction = .right }));
+                        try mason.newPre(":", .{}),
+                    }, .{ .direction = .right });
+
+                    try fields.append(try mason.newBox(&.{
+                        field_name,
+                        try mason.newBox(&.{
+                            indent,
+                            field_data,
+                        }, .{ .direction = .right }),
+                    }, .{}));
                 }
 
                 break :data try mason.newBox(fields.items, .{});

@@ -41,7 +41,10 @@ pub fn main() !void {
     const stdout = bw.writer();
 
     const text =
-        \\def a 123
+        \\def a
+        \\  add 123 456
+        \\def b
+        \\  sub 23 (negate 10) ()
     ;
 
     try debugLex(text, stdout);
