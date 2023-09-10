@@ -85,7 +85,58 @@ pub fn get(self: *const Ast, node: Node) *const Expr {
     return self.map.get(node);
 }
 
+// rendering ===================================================================
+
 pub const RenderError = blox.Error || std.fmt.AllocPrintError;
+
+const theme = struct {
+    const c = blox.Color.init;
+
+    const tag = c(.bright, .cyan);
+    const data = c(.bright, .magenta);
+    const field = c(.normal, .yellow);
+    const ident = c(.bright, .red);
+};
+
+fn renderFieldData(
+    self: *const Ast,
+    mason: *blox.Mason,
+    comptime T: type,
+    value: T,
+) RenderError!blox.Div {
+    const ally = mason.ally;
+    return switch (T) {
+        // enums
+        UnaryOp,
+        BinaryOp,
+        => try mason.newPre(@tagName(value), .{ .fg = theme.data }),
+
+        // child nodes
+        Node => try self.renderNode(mason, value),
+        []const Node => nodes: {
+            var divs = std.ArrayList(blox.Div).init(ally);
+            defer divs.deinit();
+
+            if (value.len == 0) {
+                try divs.append(try mason.newPre("{}", .{}));
+            } else {
+                for (value, 0..) |node, i| {
+                    const leader = if (i == 0) "{ " else ", ";
+                    try divs.append(try mason.newBox(&.{
+                        try mason.newPre(leader, .{}),
+                        try self.renderNode(mason, node),
+                    }, .{ .direction = .right }));
+                }
+
+                try divs.append(try mason.newPre("}", .{}));
+            }
+
+            break :nodes try mason.newBox(divs.items, .{});
+        },
+
+        else => unreachable,
+    };
+}
 
 pub fn renderNode(
     self: *const Ast,
@@ -95,39 +146,70 @@ pub fn renderNode(
     const indent = try mason.newSpacer(2, 0, .{});
     const space = try mason.newSpacer(1, 0, .{});
 
+    // rendering
     const ally = mason.ally;
     const expr = self.get(node).*;
+
+    const tag = try mason.newPre(@tagName(expr), .{ .fg = theme.tag });
+
     return switch (expr) {
-        .ident => |ident| try mason.newPre(ident, .{}),
+        // literals
+        .ident => |ident| try mason.newBox(&.{
+            tag,
+            space,
+            try mason.newPre(ident, .{ .fg = theme.ident }),
+        }, .{ .direction = .right }),
+
         inline .int, .real => |n| n: {
             const text = try std.fmt.allocPrint(ally, "{d}", .{n});
             defer ally.free(text);
 
-            break :n try mason.newPre(text, .{});
-        },
-        .def => |def| try mason.newBox(&.{
-            try mason.newBox(&.{
-                try mason.newPre("def", .{}),
+            break :n try mason.newBox(&.{
+                tag,
                 space,
-                try self.renderNode(mason, def.name),
-            }, .{ .direction = .right }),
-            try mason.newBox(&.{
-                indent,
-                try self.renderNode(mason, def.expr),
-            }, .{ .direction = .right }),
-        }, .{}),
-        .program => |prog| prog: {
-            var divs = std.ArrayList(blox.Div).init(ally);
-            defer divs.deinit();
-
-            for (prog) |child| {
-                try divs.append(try self.renderNode(mason, child));
-            }
-
-            break :prog try mason.newBox(divs.items, .{});
+                try mason.newPre(text, .{ .fg = theme.data }),
+            }, .{ .direction = .right });
         },
 
-        else => std.debug.panic("TODO render {}", .{@as(Expr.Tag, expr)}),
+        // containers
+        inline .parens,
+        .unary,
+        .binary,
+        .def,
+        .program,
+        => |data| div: {
+            const Data = @TypeOf(data);
+            const info = @typeInfo(Data);
+
+            const data_div = if (comptime info == .Struct) data: {
+                var fields = std.ArrayList(blox.Div).init(ally);
+                defer fields.deinit();
+
+                inline for (info.Struct.fields) |field| {
+                    const field_data = try self.renderFieldData(
+                        mason,
+                        field.type,
+                        @field(data, field.name),
+                    );
+
+                    try fields.append(try mason.newBox(&.{
+                        try mason.newPre(field.name, .{ .fg = theme.field }),
+                        try mason.newPre(": ", .{}),
+                        field_data,
+                    }, .{ .direction = .right }));
+                }
+
+                break :data try mason.newBox(fields.items, .{});
+            } else try self.renderFieldData(mason, Data, data);
+
+            break :div try mason.newBox(&.{
+                tag,
+                try mason.newBox(&.{
+                    indent,
+                    data_div,
+                }, .{ .direction = .right }),
+            }, .{});
+        },
     };
 }
 
