@@ -1,9 +1,10 @@
 const std = @import("std");
 const Lexer = @import("Lexer.zig");
+const parser = @import("parser.zig");
 
 fn debugLex(text: []const u8, writer: anytype) !void {
     var lexer = Lexer.init(text);
-    while (try lexer.nextToken()) |token| {
+    while (try lexer.next()) |token| {
         try writer.print(
             "{s:<12} `{s}`\n",
             .{@tagName(token.tag), lexer.slice(token)},

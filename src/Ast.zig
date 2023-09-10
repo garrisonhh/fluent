@@ -33,15 +33,25 @@ pub const Expr = union(enum) {
         rhs: Node,
     };
 
+    pub const Def = struct {
+        ident: []const u8,
+        expr: Node,
+    };
+
     ident: []const u8,
     parens: Node,
     unary: Unary,
     binary: Binary,
+    def: Def,
+    program: []const Node,
 
     fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
             .parens, .unary, .binary => {},
-            .ident => |str| ally.free(str),
+
+            inline .ident, .program => |slice| ally.free(slice),
+
+            .def => |def| ally.free(def.ident),
         }
     }
 };
@@ -49,8 +59,10 @@ pub const Expr = union(enum) {
 const Ast = @This();
 
 map: NodeMap = .{},
+root: ?Node = null,
 
 pub fn deinit(self: *Ast, ally: Allocator) void {
+    self.root = null;
     self.map.deinit(ally);
 }
 
