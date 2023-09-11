@@ -1,8 +1,8 @@
 const std = @import("std");
 const stderr = std.io.getStdErr().writer();
 const Allocator = std.mem.Allocator;
-const parser = @import("parser.zig");
-const Ast = @import("Ast.zig");
+const fluent = @import("mod.zig");
+const Ast = fluent.Ast;
 const blox = @import("blox");
 
 const TestFailure = error.TestFailure;
@@ -12,7 +12,7 @@ const ally = std.testing.allocator;
 // helpers =====================================================================
 
 fn expectExpr(ast: *Ast, expected: Ast.Node, text: []const u8) !void {
-    const node = try parser.parseFragment(ally, ast, text, .expr) orelse {
+    const node = try fluent.parseFragment(ally, ast, text, .expr) orelse {
         return TestFailure;
     };
     if (ast.eql(expected, node)) return;

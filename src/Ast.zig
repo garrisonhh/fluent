@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const com = @import("common");
 const blox = @import("blox");
-const literals = @import("literals.zig");
+const literals = @import("parser/literals.zig");
 
 pub const Node = com.Ref(.ast_node, 32);
 const NodeMap = com.RefMap(Node, Expr);

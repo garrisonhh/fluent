@@ -1,9 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const literals = @import("literals.zig");
+const fluent = @import("../mod.zig");
+const Ast = fluent.Ast;
 const Lexer = @import("Lexer.zig");
 const Token = Lexer.Token;
-const Ast = @import("Ast.zig");
+const literals = @import("literals.zig");
 
 const InvalidSyntax = error.InvalidSyntax;
 pub const ParseError = error{InvalidSyntax};

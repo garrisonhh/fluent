@@ -1,28 +1,13 @@
 const std = @import("std");
-const Lexer = @import("Lexer.zig");
-const parser = @import("parser.zig");
 const blox = @import("blox");
-
-fn debugLex(text: []const u8, writer: anytype) !void {
-    var lexer = Lexer.init(text);
-
-    try writer.print("[tokens]\n", .{});
-    while (try lexer.next()) |token| {
-        try writer.print(
-            "{s:<12} `{s}`\n",
-            .{ @tagName(token.tag), lexer.slice(token) },
-        );
-    }
-
-    try writer.print("\n", .{});
-}
+const fluent = @import("mod.zig");
 
 fn debugParse(text: []const u8, writer: anytype) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const ally = gpa.allocator();
 
-    var ast = try parser.parse(ally, text);
+    var ast = try fluent.parse(ally, text);
     defer ast.deinit(ally);
 
     var mason = blox.Mason.init(ally);
@@ -61,9 +46,7 @@ pub fn main() !void {
         \\  &&std::os::linux.read 1 4096 &buf
     ;
 
-    try debugLex(text, stdout);
-    try bw.flush();
-
     try debugParse(text, stdout);
+
     try bw.flush();
 }
