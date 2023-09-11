@@ -12,31 +12,6 @@ pub const Error =
     Lexer.Error ||
     ParseError;
 
-/// given an error union with an error containing `error.InvalidSyntax`,
-/// if `error.InvalidSyntax` is returned, returns null. otherwise provides the
-/// original value.
-pub fn filterSyntaxError(error_union: anytype) t: {
-    const eu = @typeInfo(@TypeOf(error_union)).ErrorUnion;
-
-    // make error set without InvalidSyntax
-    var buf: []std.builtin.Type.Error = undefined;
-    var i = 0;
-    for (@typeInfo(eu.error_set).ErrorSet.?) |err| {
-        if (!std.meta.eql(u8, err.name, @errorName(ParseError.InvalidSyntax))) {
-            buf[i] = err;
-            i += 1;
-        }
-    }
-
-    const E = @Type(.{ .ErrorSet = &buf });
-    break :t E!?eu.payload;
-} {
-    return error_union catch |e| switch (e) {
-        InvalidSyntax => null,
-        else => e,
-    };
-}
-
 fn parseToken(lexer: *Lexer, tag: Token.Tag) Error!?Token {
     const token = try lexer.peek() orelse {
         return null;
@@ -72,7 +47,7 @@ fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
     };
 }
 
-const ParserFn = fn(Allocator, *Ast, *Lexer) Error!?Ast.Node;
+const ParserFn = fn (Allocator, *Ast, *Lexer) Error!?Ast.Node;
 
 /// a unary prefix parser
 fn prefixPrecedenceParser(
@@ -132,7 +107,7 @@ fn prefixPrecedenceParser(
 }
 
 fn binaryPrecedenceParser(
-    comptime binds: enum {left, right},
+    comptime binds: enum { left, right },
     comptime valid_tags: []const Token.Tag,
     comptime inner_parser: ParserFn,
 ) ParserFn {
@@ -251,11 +226,11 @@ fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 
 const parseName = binaryPrecedenceParser(
     .left,
-    &.{.double_colon, .dot},
+    &.{ .double_colon, .dot },
     parseAtom,
 );
 
-const unary_prefixes: []const Token.Tag = &.{.minus, .ampersand};
+const unary_prefixes: []const Token.Tag = &.{ .minus, .ampersand };
 
 const parsePrefixedName = prefixPrecedenceParser(unary_prefixes, parseName);
 
@@ -293,13 +268,13 @@ const parsePrefixedApplication = prefixPrecedenceParser(
 
 const parseMulDivMod = binaryPrecedenceParser(
     .left,
-    &.{.star, .slash, .percent},
+    &.{ .star, .slash, .percent },
     parsePrefixedApplication,
 );
 
 const parseAddSub = binaryPrecedenceParser(
     .left,
-    &.{.plus, .minus},
+    &.{ .plus, .minus },
     parseMulDivMod,
 );
 
@@ -308,9 +283,6 @@ const parseStatement = binaryPrecedenceParser(
     &.{.semicolon},
     parseAddSub,
 );
-
-/// parseExpr is the lowest precedence parser
-const parseExpr = parseStatement;
 
 /// def ::= `def` <atom> <expr>
 fn parseDef(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
@@ -336,24 +308,55 @@ fn parseDef(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     });
 }
 
-/// a program is a series of defs
+/// the lowest precedence parser
+fn parseExpr(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
+    const lowest_parser = parseStatement;
+
+    const pk = try lexer.peek() orelse return null;
+    return switch (pk.tag) {
+        .def => try parseDef(ally, ast, lexer),
+
+        else => try lowest_parser(ally, ast, lexer),
+    };
+}
+
+/// a program is just a series of top level expressions
 fn parseProgram(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!Ast.Node {
     var nodes = std.ArrayList(Ast.Node).init(ally);
     defer nodes.deinit();
 
-    while (try parseDef(ally, ast, lexer)) |node| {
+    while (try parseExpr(ally, ast, lexer)) |node| {
         try nodes.append(node);
     }
 
     return try ast.new(ally, .{ .program = try nodes.toOwnedSlice() });
 }
 
-pub fn parse(ally: Allocator, text: []const u8) Error!Ast {
+pub const FragmentInto = enum {program, expr};
+
+/// parse text into an unattached node with an ast as the context
+pub fn parseFragment(
+    ally: Allocator,
+    ast: *Ast,
+    text: []const u8,
+    comptime into: FragmentInto,
+) Error!?Ast.Node {
     var lexer = Lexer.init(text);
+
+    const parser = switch (into) {
+        .program => parseProgram,
+        .expr => parseExpr,
+    };
+
+    return try parser(ally, ast, &lexer);
+}
+
+/// parse text into an ast
+pub fn parse(ally: Allocator, text: []const u8) Error!Ast {
     var ast = Ast{};
     errdefer ast.deinit(ally);
 
-    ast.root = try parseProgram(ally, &ast, &lexer);
+    ast.root = try parseFragment(ally, &ast, text, .program);
 
     return ast;
 }
