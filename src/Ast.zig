@@ -200,24 +200,34 @@ pub fn renderNode(
                 defer fields.deinit();
 
                 inline for (info.Struct.fields) |field| {
+                    const field_name = try mason.newBox(&.{
+                        try mason.newPre(field.name, .{ .fg = theme.field }),
+                        try mason.newPre(":", .{}),
+                    }, .{ .direction = .right });
+
                     const field_data = try self.renderFieldData(
                         mason,
                         field.type,
                         @field(data, field.name),
                     );
 
-                    const field_name = try mason.newBox(&.{
-                        try mason.newPre(field.name, .{ .fg = theme.field }),
-                        try mason.newPre(":", .{}),
-                    }, .{ .direction = .right });
-
-                    try fields.append(try mason.newBox(&.{
-                        field_name,
-                        try mason.newBox(&.{
-                            indent,
+                    const data_height = mason.getSize(field_data)[1];
+                    const field_div = switch (data_height) {
+                        0...1 => try mason.newBox(&.{
+                            field_name,
+                            space,
                             field_data,
                         }, .{ .direction = .right }),
-                    }, .{}));
+                        else => try mason.newBox(&.{
+                            field_name,
+                            try mason.newBox(&.{
+                                indent,
+                                field_data,
+                            }, .{ .direction = .right }),
+                        }, .{}),
+                    };
+
+                    try fields.append(field_div);
                 }
 
                 break :data try mason.newBox(fields.items, .{});
