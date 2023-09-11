@@ -23,11 +23,13 @@ pub const Token = struct {
         rcurly,
 
         colon,
+        semicolon,
         comma,
         minus,
         plus,
         star,
         slash,
+        percent,
     };
 
     tag: Tag,
@@ -139,11 +141,13 @@ const Symbol = struct {
             make("(", .lparen),
             make(")", .rparen),
             make(":", .colon),
+            make(";", .semicolon),
             make(",", .comma),
             make("-", .minus),
             make("+", .plus),
             make("*", .star),
             make("/", .slash),
+            make("%", .percent),
         };
 
         const by_reverse_len = struct {

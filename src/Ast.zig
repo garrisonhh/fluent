@@ -14,10 +14,13 @@ pub const UnaryOp = enum {
 };
 
 pub const BinaryOp = enum {
+    statement,
+
     add,
     subtract,
     multiply,
     divide,
+    modulus,
 };
 
 pub const Expr = union(enum) {

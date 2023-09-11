@@ -50,6 +50,72 @@ fn expectToken(lexer: *Lexer, tag: Token.Tag) Error!Token {
     return token;
 }
 
+fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
+    return switch (tag) {
+        .semicolon => .statement,
+        .plus => .add,
+        .minus => .subtract,
+        .star => .multiply,
+        .slash => .divide,
+        .percent => .modulus,
+        else => null,
+    };
+}
+
+const ParserFn = fn(Allocator, *Ast, *Lexer) Error!?Ast.Node;
+
+fn binaryPrecedenceParser(
+    comptime binds: enum {left, right},
+    comptime valid_tags: []const Token.Tag,
+    comptime inner_parser: ParserFn,
+) ParserFn {
+    return struct {
+        fn binaryParser(
+            ally: Allocator,
+            ast: *Ast,
+            lexer: *Lexer,
+        ) Error!?Ast.Node {
+            var lhs = try inner_parser(ally, ast, lexer) orelse {
+                return null;
+            };
+
+            parse: while (true) {
+                // parse token
+                const pk = try lexer.peek() orelse {
+                    break :parse;
+                };
+                valid: for (valid_tags) |valid| {
+                    if (pk.tag == valid) break :valid;
+                } else {
+                    break :parse;
+                }
+                lexer.accept(pk);
+
+                // parse rhs
+                const rhs_parser = comptime switch (binds) {
+                    .left => inner_parser,
+                    .right => binaryParser,
+                };
+                const rhs = try rhs_parser(ally, ast, lexer) orelse {
+                    return InvalidSyntax;
+                };
+
+                // convert to ast node
+                const op = binaryOpFromTokenTag(pk.tag).?;
+                lhs = try ast.new(ally, .{
+                    .binary = .{
+                        .op = op,
+                        .lhs = lhs,
+                        .rhs = rhs,
+                    },
+                });
+            }
+
+            return lhs;
+        }
+    }.binaryParser;
+}
+
 /// atom ::=
 ///     | ident
 ///     | int
@@ -57,91 +123,124 @@ fn expectToken(lexer: *Lexer, tag: Token.Tag) Error!Token {
 ///     | `(` expr `)`
 fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     const pk = try lexer.peek() orelse return null;
-    switch (pk.tag) {
-        .ident => {
+    return switch (pk.tag) {
+        // atomic tokens
+        .ident => ident: {
             const ident = try ally.dupe(u8, lexer.slice(pk));
             lexer.accept(pk);
-            return try ast.new(ally, .{ .ident = ident });
+            break :ident try ast.new(ally, .{ .ident = ident });
         },
-        .int => {
+        .int => int: {
             const text = lexer.slice(pk);
             const int = literals.parseDecimalInt(text) catch {
-                return InvalidSyntax;
+                break :int InvalidSyntax;
             };
 
             lexer.accept(pk);
-            return try ast.new(ally, .{ .int = int });
+            break :int try ast.new(ally, .{ .int = int });
         },
-        .real => {
+        .real => real: {
             const text = lexer.slice(pk);
             const real = literals.parseDecimalReal(text) catch {
-                return InvalidSyntax;
+                break :real InvalidSyntax;
             };
 
             lexer.accept(pk);
-            return try ast.new(ally, .{ .real = real });
+            break :real try ast.new(ally, .{ .real = real });
         },
-        .lparen => {
+
+        // parens
+        .lparen => parens: {
             lexer.accept(pk);
 
             // unit
             const pk2 = try lexer.peek() orelse {
-                return InvalidSyntax;
+                break :parens InvalidSyntax;
             };
             if (pk2.tag == .rparen) {
                 lexer.accept(pk2);
-                return try ast.new(ally, .unit);
+                break :parens try ast.new(ally, .unit);
             }
 
             // wrapped expr
             const inner = try parseExpr(ally, ast, lexer) orelse {
-                return InvalidSyntax;
+                break :parens InvalidSyntax;
             };
             _ = try expectToken(lexer, .rparen);
 
-            return try ast.new(ally, .{ .parens = inner });
+            break :parens try ast.new(ally, .{ .parens = inner });
         },
-        else => {
-            return null;
+
+        // list/map literal
+        .lcurly => {
+            @panic("TODO list/map literals");
         },
-    }
+
+        else => null,
+    };
 }
 
-/// expr ::=
-///     | atom+ atom
-///     | atom
-fn parseExpr(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
-    const first = try parseAtom(ally, ast, lexer) orelse {
+fn parseApplication(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
+    const inner_parser = parseAtom;
+
+    // parse inner
+    const first = try inner_parser(ally, ast, lexer) orelse {
         return null;
     };
 
-    const second = try parseAtom(ally, ast, lexer) orelse {
+    // try to parse second inner expr; if successful, this is an application.
+    // otherwise, just return the inner parser's result.
+    const second = try inner_parser(ally, ast, lexer) orelse {
         return first;
     };
 
+    // parse any further arguments for the application
     var app = try std.ArrayList(Ast.Node).initCapacity(ally, 2);
     defer app.deinit();
 
     app.appendSliceAssumeCapacity(&.{ first, second });
 
-    while (try parseAtom(ally, ast, lexer)) |cont| {
+    while (try inner_parser(ally, ast, lexer)) |cont| {
         try app.append(cont);
     }
 
     return try ast.new(ally, .{ .call = try app.toOwnedSlice() });
 }
 
+const parseMulDivMod = binaryPrecedenceParser(
+    .left,
+    &.{.star, .slash, .percent},
+    parseApplication,
+);
+
+const parseAddSub = binaryPrecedenceParser(
+    .left,
+    &.{.plus, .minus},
+    parseMulDivMod,
+);
+
+const parseStatement = binaryPrecedenceParser(
+    .left,
+    &.{.semicolon},
+    parseAddSub,
+);
+
+/// parseExpr is always the lowest precedence parser
+const parseExpr = parseStatement;
+
 /// def ::= `def` <atom> <expr>
 fn parseDef(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     const pk = try lexer.peek() orelse return null;
-    if (pk.tag != .def) return ParseError.InvalidSyntax;
+    if (pk.tag != .def) {
+        return InvalidSyntax;
+    }
     lexer.accept(pk);
 
     const name = try parseAtom(ally, ast, lexer) orelse {
-        return ParseError.InvalidSyntax;
+        return InvalidSyntax;
     };
     const expr = try parseExpr(ally, ast, lexer) orelse {
-        return ParseError.InvalidSyntax;
+        return InvalidSyntax;
     };
 
     return try ast.new(ally, .{
@@ -161,9 +260,7 @@ fn parseProgram(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!Ast.Node {
         try nodes.append(node);
     }
 
-    return try ast.new(ally, .{
-        .program = try nodes.toOwnedSlice(),
-    });
+    return try ast.new(ally, .{ .program = try nodes.toOwnedSlice() });
 }
 
 pub fn parse(ally: Allocator, text: []const u8) Error!Ast {

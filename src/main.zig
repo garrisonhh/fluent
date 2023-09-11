@@ -43,8 +43,15 @@ pub fn main() !void {
     const text =
         \\def a
         \\  add 123 456
+        \\
         \\def b
         \\  sub 23.1232 (negate 10.) ()
+        \\
+        \\def c
+        \\  1;
+        \\  1 + 2;
+        \\  1 * 2 + 3;
+        \\  1 % 3 + 2
     ;
 
     try debugLex(text, stdout);
