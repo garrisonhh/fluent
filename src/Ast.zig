@@ -11,10 +11,13 @@ const NodeMap = com.RefMap(Node, Expr);
 
 pub const UnaryOp = enum {
     negate,
+    addr,
 };
 
 pub const BinaryOp = enum {
     statement,
+    ns_access,
+    field_access,
 
     add,
     subtract,
@@ -193,9 +196,8 @@ pub fn renderNode(
             const Data = @TypeOf(data);
             const info = @typeInfo(Data);
 
-            const data_div = if (Data != Node and
-                comptime info == .Struct)
-            data: {
+            if (Data != Node and info == .Struct) {
+                // render individual fields
                 var fields = std.ArrayList(blox.Div).init(ally);
                 defer fields.deinit();
 
@@ -211,6 +213,7 @@ pub fn renderNode(
                         @field(data, field.name),
                     );
 
+                    // fold name + data
                     const data_height = mason.getSize(field_data)[1];
                     const field_div = switch (data_height) {
                         0...1 => try mason.newBox(&.{
@@ -230,16 +233,36 @@ pub fn renderNode(
                     try fields.append(field_div);
                 }
 
-                break :data try mason.newBox(fields.items, .{});
-            } else try self.renderFieldData(mason, Data, data);
+                // fold them together
+                const data_div = try mason.newBox(fields.items, .{});
 
-            break :div try mason.newBox(&.{
-                tag,
-                try mason.newBox(&.{
-                    indent,
-                    data_div,
-                }, .{ .direction = .right }),
-            }, .{});
+                break :div try mason.newBox(&.{
+                    tag,
+                    try mason.newBox(&.{
+                        indent,
+                        data_div,
+                    }, .{ .direction = .right }),
+                }, .{});
+            } else {
+                // directly render data for expr
+                const data_div = try self.renderFieldData(mason, Data, data);
+                const data_height = mason.getSize(data_div)[1];
+
+                break :div switch (data_height) {
+                    0...1 => try mason.newBox(&.{
+                        tag,
+                        space,
+                        data_div,
+                    }, .{ .direction = .right }),
+                    else => try mason.newBox(&.{
+                        tag,
+                        try mason.newBox(&.{
+                            indent,
+                            data_div,
+                        }, .{ .direction = .right }),
+                    }, .{}),
+                };
+            }
         },
     };
 }

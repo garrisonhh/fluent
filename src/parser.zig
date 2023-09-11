@@ -37,22 +37,32 @@ pub fn filterSyntaxError(error_union: anytype) t: {
     };
 }
 
-fn expectToken(lexer: *Lexer, tag: Token.Tag) Error!Token {
+fn parseToken(lexer: *Lexer, tag: Token.Tag) Error!?Token {
     const token = try lexer.peek() orelse {
-        return InvalidSyntax;
+        return null;
     };
 
     if (token.tag != tag) {
-        return InvalidSyntax;
+        return null;
     }
 
     lexer.accept(token);
     return token;
 }
 
+fn unaryOpFromTokenTag(tag: Token.Tag) ?Ast.UnaryOp {
+    return switch (tag) {
+        .minus => .negate,
+        .ampersand => .addr,
+        else => null,
+    };
+}
+
 fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
     return switch (tag) {
         .semicolon => .statement,
+        .double_colon => .ns_access,
+        .dot => .field_access,
         .plus => .add,
         .minus => .subtract,
         .star => .multiply,
@@ -63,6 +73,63 @@ fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
 }
 
 const ParserFn = fn(Allocator, *Ast, *Lexer) Error!?Ast.Node;
+
+/// a unary prefix parser
+fn prefixPrecedenceParser(
+    comptime valid_tags: []const Token.Tag,
+    comptime inner_parser: ParserFn,
+) ParserFn {
+    return struct {
+        fn prefixParser(
+            ally: Allocator,
+            ast: *Ast,
+            lexer: *Lexer,
+        ) Error!?Ast.Node {
+            // parse unary ops
+            var ops = std.ArrayList(Ast.UnaryOp).init(ally);
+            defer ops.deinit();
+
+            parse: while (true) {
+                // parse token
+                const pk = try lexer.peek() orelse {
+                    break :parse;
+                };
+                valid: for (valid_tags) |valid| {
+                    if (pk.tag == valid) break :valid;
+                } else {
+                    break :parse;
+                }
+                lexer.accept(pk);
+
+                const op = unaryOpFromTokenTag(pk.tag).?;
+                try ops.append(op);
+            }
+
+            // parse inner
+            var expr = try inner_parser(ally, ast, lexer) orelse {
+                if (ops.items.len == 0) {
+                    // nothing was parsed
+                    return null;
+                }
+
+                // an inner expression was expected
+                return InvalidSyntax;
+            };
+
+            // create unary stuff
+            while (ops.popOrNull()) |op| {
+                expr = try ast.new(ally, .{
+                    .unary = .{
+                        .op = op,
+                        .child = expr,
+                    },
+                });
+            }
+
+            return expr;
+        }
+    }.prefixParser;
+}
 
 fn binaryPrecedenceParser(
     comptime binds: enum {left, right},
@@ -166,7 +233,9 @@ fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
             const inner = try parseExpr(ally, ast, lexer) orelse {
                 break :parens InvalidSyntax;
             };
-            _ = try expectToken(lexer, .rparen);
+            _ = try parseToken(lexer, .rparen) orelse {
+                break :parens InvalidSyntax;
+            };
 
             break :parens try ast.new(ally, .{ .parens = inner });
         },
@@ -180,8 +249,18 @@ fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     };
 }
 
+const parseName = binaryPrecedenceParser(
+    .left,
+    &.{.double_colon, .dot},
+    parseAtom,
+);
+
+const unary_prefixes: []const Token.Tag = &.{.minus, .ampersand};
+
+const parsePrefixedName = prefixPrecedenceParser(unary_prefixes, parseName);
+
 fn parseApplication(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
-    const inner_parser = parseAtom;
+    const inner_parser = parsePrefixedName;
 
     // parse inner
     const first = try inner_parser(ally, ast, lexer) orelse {
@@ -207,10 +286,15 @@ fn parseApplication(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     return try ast.new(ally, .{ .call = try app.toOwnedSlice() });
 }
 
+const parsePrefixedApplication = prefixPrecedenceParser(
+    unary_prefixes,
+    parseApplication,
+);
+
 const parseMulDivMod = binaryPrecedenceParser(
     .left,
     &.{.star, .slash, .percent},
-    parseApplication,
+    parsePrefixedApplication,
 );
 
 const parseAddSub = binaryPrecedenceParser(
@@ -225,13 +309,14 @@ const parseStatement = binaryPrecedenceParser(
     parseAddSub,
 );
 
-/// parseExpr is always the lowest precedence parser
+/// parseExpr is the lowest precedence parser
 const parseExpr = parseStatement;
 
 /// def ::= `def` <atom> <expr>
 fn parseDef(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     const pk = try lexer.peek() orelse return null;
     if (pk.tag != .def) {
+        std.debug.print("expected def got {}\n", .{pk.tag});
         return InvalidSyntax;
     }
     lexer.accept(pk);

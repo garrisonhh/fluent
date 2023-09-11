@@ -22,8 +22,11 @@ pub const Token = struct {
         lcurly,
         rcurly,
 
+        ampersand,
+        double_colon,
         colon,
         semicolon,
+        dot,
         comma,
         minus,
         plus,
@@ -136,12 +139,15 @@ const Symbol = struct {
 
     const list = syms: {
         var arr = [_]Self{
+            make("&", .ampersand),
             make("{", .lparen),
             make("}", .rparen),
             make("(", .lparen),
             make(")", .rparen),
+            make("::", .double_colon),
             make(":", .colon),
             make(";", .semicolon),
+            make(".", .dot),
             make(",", .comma),
             make("-", .minus),
             make("+", .plus),

@@ -45,13 +45,20 @@ pub fn main() !void {
         \\  add 123 456
         \\
         \\def b
-        \\  sub 23.1232 (negate 10.) ()
+        \\  sub 23.1232 (negate 10.) (((3))) ()
         \\
         \\def c
         \\  1;
         \\  1 + 2;
         \\  1 * 2 + 3;
         \\  1 % 3 + 2
+        \\
+        \\def d
+        \\  f 1 2 3 * g 4 5 6;
+        \\  ()
+        \\
+        \\def e
+        \\  &&std::os::linux.read 1 4096 &buf
     ;
 
     try debugLex(text, stdout);
