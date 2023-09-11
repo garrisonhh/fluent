@@ -21,9 +21,39 @@ pub const Real = f64;
 pub const ParseDecimalRealError = error{BadDecimalReal};
 
 pub fn parseDecimalReal(text: []const u8) ParseDecimalRealError!Real {
-    _ = text;
+    var index: usize = 0;
 
-    @panic("TODO");
+    // integral part
+    var int: Real = 0.0;
+    while (text[index] != '.') : (index += 1) {
+        const ch = text[index];
+        const digit: Real = switch (ch) {
+            '0'...'9' => @floatFromInt(ch - '0'),
+            else => return ParseDecimalRealError.BadDecimalReal,
+        };
 
-    // remember to use muladd
+        int = @mulAdd(Real, int, 10.0, digit);
+    }
+
+    // skip dot
+    index += 1;
+
+    // fractional part
+    var fract: Real = 0.0;
+    var exp: Real = -1.0;
+    while (index < text.len) : ({
+        index += 1;
+        exp -= 1.0;
+    }) {
+        const ch = text[index];
+        const digit: Real = switch (ch) {
+            '0'...'9' => @floatFromInt(ch - '0'),
+            else => return ParseDecimalRealError.BadDecimalReal,
+        };
+
+        const mult = std.math.pow(Real, 10.0, exp);
+        fract = @mulAdd(Real, digit, mult, fract);
+    }
+
+    return int + fract;
 }

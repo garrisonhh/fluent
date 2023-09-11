@@ -44,7 +44,7 @@ pub fn main() !void {
         \\def a
         \\  add 123 456
         \\def b
-        \\  sub 23 (negate 10) ()
+        \\  sub 23.1232 (negate 10.) ()
     ;
 
     try debugLex(text, stdout);
