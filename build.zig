@@ -8,10 +8,12 @@ pub fn build(b: *std.Build) void {
     const blox = b.dependency("blox", .{}).module("blox");
 
     // build options
-    const log_lexer = b.option(bool, "log-lexer", "enable lexer logging");
+    const log_options = b.option(bool, "log-options", "log options at init");
+    const log_lexer = b.option(bool, "log-lexer", "log tokens");
 
     // propagated options
     const options = b.addOptions();
+    options.addOption(bool, "log_options", log_options orelse false);
     options.addOption(bool, "log_lexer", log_lexer orelse false);
 
     // exe
@@ -43,6 +45,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    tests.addOptions("options", options);
     tests.addModule("common", common);
     tests.addModule("blox", blox);
 

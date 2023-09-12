@@ -204,8 +204,7 @@ const Symbol = struct {
 };
 
 fn skipSpaces(self: *Lexer) Error!void {
-    while (true) {
-        const pk = try self.peekC() orelse return;
+    while (try self.peekC()) |pk| {
         if (!pk.isSpace()) return;
         self.acceptC(pk);
     }
@@ -289,10 +288,10 @@ fn lex(self: *Lexer) Error!?Token {
             std.debug.panic("error in lexer logging: {s}\n", .{@errorName(e)});
         };
 
-        logger.debug("{s:16} `{s}`\n{}", .{
+        logger.debug("{s} `{s}`\n{}", .{
             @tagName(token.tag),
             self.slice(token),
-            mason.fmt(rendered, .{}),
+            mason.fmt(rendered, .{ .enable_colors = false }),
         });
     }
 

@@ -108,7 +108,7 @@ fn collectContext(loc: Loc) RenderLocContext {
     var this: ?Line = null;
     var after: ?Line = null;
 
-    var lines = std.mem.tokenizeScalar(u8, file.text, '\n');
+    var lines = std.mem.splitScalar(u8, file.text, '\n');
     var line_index: usize = 0;
     while (lines.next()) |line_text| : (line_index += 1) {
         const line = RenderLocContext.Line{
@@ -118,7 +118,7 @@ fn collectContext(loc: Loc) RenderLocContext {
 
         if (line_index == loc.line_index) {
             this = line;
-        } else if (line_index == loc.line_index - 1) {
+        } else if (line_index + 1 == loc.line_index) {
             before = line;
         } else if (line_index == loc.line_index + 1) {
             after = line;

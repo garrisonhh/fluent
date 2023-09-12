@@ -26,17 +26,17 @@ const options = @import("options");
 const blox = @import("blox");
 
 pub fn init() void {
-    std.debug.print("[options]\n", .{});
+    if (options.log_options) {
+        const logger = std.log.scoped(.options);
 
-    const decls = @typeInfo(options).Struct.decls;
-    inline for (decls) |decl| {
-        std.debug.print("{s}: {any}\n", .{
-            decl.name,
-            @field(options, decl.name),
-        });
+        const decls = @typeInfo(options).Struct.decls;
+        inline for (decls) |decl| {
+            logger.info("{s}: {any}\n", .{
+                decl.name,
+                @field(options, decl.name),
+            });
+        }
     }
-
-    std.debug.print("\n", .{});
 }
 
 pub fn deinit(ally: Allocator) void {
@@ -90,6 +90,15 @@ pub const std_options = struct {
         var mason = blox.Mason.init(ally);
         defer mason.deinit();
 
+        // render text
+        const text = try std.fmt.allocPrint(ally, format, args);
+        defer ally.free(text);
+
+        var slice = text;
+        while (std.mem.endsWith(u8, slice, "\n")) {
+            slice.len -= 1;
+        }
+
         // render log
         const tag = try mason.newBox(&.{
             try mason.newPre("[", .{}),
@@ -101,12 +110,9 @@ pub const std_options = struct {
             try mason.newPre("] ", .{}),
         }, .{ .direction = .right });
 
-        const text = try std.fmt.allocPrint(ally, format, args);
-        defer ally.free(text);
-
         const rendered = try mason.newBox(&.{
             tag,
-            try mason.newPre(text, .{}),
+            try mason.newPre(slice, .{}),
         }, .{ .direction = .right });
 
         // write to stderr
