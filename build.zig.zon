@@ -7,8 +7,7 @@
             .hash = "122024a6d662632bdc90983cfa0ba64cb3b73df3d8329b831677059ee878100497c9",
         },
         .blox = .{
-            .url = "https://github.com/garrisonhh/blox/tarball/f38925b3da305c7dee952f0d5a8b76f47fb4657f",
-            .hash = "122092df44dbb72982c45d36bf1307cea85ff7484b71f43a3d4f4a454a380f3beb1c",
+            .url = "https://github.com/garrisonhh/blox/tarball/f81974bed9f604ce020d32763dd240921fa8d413",
         },
     },
 }

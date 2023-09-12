@@ -3,6 +3,7 @@ const options = @import("options");
 const com = @import("common");
 const Codepoint = com.utf8.Codepoint;
 const fluent = @import("../mod.zig");
+const blox = @import("blox");
 
 const logger = std.log.scoped(.lexer);
 
@@ -65,6 +66,7 @@ const Lexer = @This();
 const CodepointCache = com.BoundedRingBuffer(Codepoint, 8);
 const TokenCache = com.BoundedRingBuffer(Token, 8);
 
+/// the location of the peeked/next token
 loc: fluent.Loc,
 iter: Codepoint.Iterator,
 cache: TokenCache = .{},
@@ -277,11 +279,22 @@ fn lex(self: *Lexer) Error!?Token {
         .stop = stop_index,
     };
 
-    logger.debug("{s:16} `{s}` at {}", .{
-        @tagName(token.tag),
-        self.slice(token),
-        start_loc,
-    });
+    if (options.log_lexer) {
+        const ally = std.heap.page_allocator;
+
+        var mason = blox.Mason.init(ally);
+        defer mason.deinit();
+
+        const rendered = fluent.sources.render(&mason, start_loc) catch |e| {
+            std.debug.panic("error in lexer logging: {s}\n", .{@errorName(e)});
+        };
+
+        logger.debug("{s:16} `{s}`\n{}", .{
+            @tagName(token.tag),
+            self.slice(token),
+            mason.fmt(rendered, .{}),
+        });
+    }
 
     return token;
 }
