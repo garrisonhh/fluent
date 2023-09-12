@@ -32,25 +32,25 @@ pub fn main() !void {
     const stdout = bw.writer();
 
     const text =
-        \\def a
-        \\  add 123 456
+        \\let a = add 123 456
+        \\let b = sub 23.1232 (negate 10.) (((3))) ()
+        \\let c = f 1 2 3 * g 4 5 6
         \\
-        \\def b
-        \\  sub 23.1232 (negate 10.) (((3))) ()
-        \\
-        \\def c
+        \\let d =
         \\  1;
         \\  1 + 2;
         \\  1 * 2 + 3;
         \\  1 % 3 + 2
         \\
-        \\def d
-        \\  f 1 2 3 * g 4 5 6;
-        \\  ()
-        \\
-        \\def e
-        \\  &&std::os::linux.read 4096 &buf;
+        \\let e =
+        \\  &&std.os.linux.read 4096 &buf;
         \\  &(&fun) arg1 arg2
+        \\
+        \\let f =
+        \\  if true then
+        \\    3
+        \\  else
+        \\    5
     ;
     const source = try fluent.sources.add(ally, "test", text);
 

@@ -16,8 +16,8 @@ pub const UnaryOp = enum {
 };
 
 pub const BinaryOp = enum {
+    def,
     statement,
-    ns_access,
     field_access,
 
     add,
@@ -45,9 +45,15 @@ pub const Expr = union(enum) {
         rhs: Node,
     };
 
-    pub const Def = struct {
+    pub const Let = struct {
         name: Node,
         expr: Node,
+    };
+
+    pub const If = struct {
+        cond: Node,
+        if_true: Node,
+        if_false: Node,
     };
 
     unit,
@@ -57,10 +63,11 @@ pub const Expr = union(enum) {
 
     parens: Node,
     call: []const Node,
+    program: []const Node,
     unary: Unary,
     binary: Binary,
-    def: Def,
-    program: []const Node,
+    let: Let,
+    @"if": If,
 
     fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
@@ -70,7 +77,8 @@ pub const Expr = union(enum) {
             .parens,
             .unary,
             .binary,
-            .def,
+            .let,
+            .@"if",
             => {},
 
             inline .ident,
@@ -269,8 +277,9 @@ pub fn renderNode(
         .call,
         .unary,
         .binary,
-        .def,
         .program,
+        .let,
+        .@"if",
         => |data| div: {
             const Data = @TypeOf(data);
             const info = @typeInfo(Data);

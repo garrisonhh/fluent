@@ -19,7 +19,10 @@ pub const Token = struct {
         int,
         real,
 
-        def,
+        let,
+        @"if",
+        then,
+        @"else",
 
         lparen,
         rparen,
@@ -27,7 +30,7 @@ pub const Token = struct {
         rcurly,
 
         ampersand,
-        double_colon,
+        equals,
         colon,
         semicolon,
         dot,
@@ -138,7 +141,10 @@ const Keyword = struct {
     }
 
     const list = [_]Keyword{
-        make("def", .def),
+        make("let", .let),
+        make("if", .@"if"),
+        make("then", .then),
+        make("else", .@"else"),
     };
 };
 
@@ -171,7 +177,7 @@ const Symbol = struct {
             make("}", .rparen),
             make("(", .lparen),
             make(")", .rparen),
-            make("::", .double_colon),
+            make("=", .equals),
             make(":", .colon),
             make(";", .semicolon),
             make(".", .dot),
