@@ -1,6 +1,6 @@
 //! forwarded namespaces for module
 
-pub const Ast = @import("Ast.zig");
+pub const Ast = @import("ast/Ast.zig");
 
 pub const sources = @import("sources.zig");
 pub const Source = sources.Source;

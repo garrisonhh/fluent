@@ -3,6 +3,7 @@ const options = @import("options");
 const com = @import("common");
 const Codepoint = com.utf8.Codepoint;
 const fluent = @import("../mod.zig");
+const Loc = fluent.Loc;
 const blox = @import("blox");
 
 const logger = std.log.scoped(.lexer);
@@ -43,9 +44,11 @@ pub const Token = struct {
         percent,
     };
 
+    /// starting location
+    loc: Loc,
     tag: Tag,
-    start: u32,
-    stop: u32,
+    start: usize,
+    stop: usize,
 
     pub fn format(
         self: Self,
@@ -53,11 +56,7 @@ pub const Token = struct {
         _: std.fmt.FormatOptions,
         writer: anytype,
     ) @TypeOf(writer).Error!void {
-        try writer.print("<{s} {d}:{d}>", .{
-            @tagName(self.tag),
-            self.start,
-            self.stop,
-        });
+        try writer.print("<{} {s}>", .{self.loc, @tagName(self.tag)});
     }
 };
 
@@ -67,7 +66,7 @@ const CodepointCache = com.BoundedRingBuffer(Codepoint, 8);
 const TokenCache = com.BoundedRingBuffer(Token, 8);
 
 /// the location of the peeked/next token
-loc: fluent.Loc,
+loc: Loc,
 iter: Codepoint.Iterator,
 cache: TokenCache = .{},
 
@@ -273,6 +272,7 @@ fn lex(self: *Lexer) Error!?Token {
     const stop_index = self.index();
 
     const token = Token{
+        .loc = start_loc,
         .tag = tag,
         .start = start_index,
         .stop = stop_index,

@@ -12,7 +12,8 @@ const ally = std.testing.allocator;
 // helpers =====================================================================
 
 fn expectExpr(ast: *Ast, expected: Ast.Node, text: []const u8) !void {
-    const node = try fluent.parseFragment(ally, ast, text, .expr) orelse {
+    const source = try fluent.sources.add(ally, "test", text);
+    const node = try fluent.parseFragment(ally, ast, source, .expr) orelse {
         return TestFailure;
     };
     if (ast.eql(expected, node)) return;
@@ -45,18 +46,26 @@ fn expectExpr(ast: *Ast, expected: Ast.Node, text: []const u8) !void {
 }
 
 fn testIdent(ident: []const u8) !void {
+    fluent.init();
+    defer fluent.deinit(ally);
+
     var ast = Ast{};
     defer ast.deinit(ally);
 
-    const expr = try ast.new(ally, .{ .ident = try ally.dupe(u8, ident) });
+    const expr = try ast.new(ally, null, .{
+        .ident = try ally.dupe(u8, ident),
+    });
     try expectExpr(&ast, expr, ident);
 }
 
 fn testInt(int: Ast.Expr.Int) !void {
+    fluent.init();
+    defer fluent.deinit(ally);
+
     var ast = Ast{};
     defer ast.deinit(ally);
 
-    const expr = try ast.new(ally, .{ .int = int });
+    const expr = try ast.new(ally, null, .{ .int = int });
 
     const text = try std.fmt.allocPrint(ally, "{d}", .{int});
     defer ally.free(text);
@@ -65,10 +74,13 @@ fn testInt(int: Ast.Expr.Int) !void {
 }
 
 fn testReal(real: Ast.Expr.Real) !void {
+    fluent.init();
+    defer fluent.deinit(ally);
+
     var ast = Ast{};
     defer ast.deinit(ally);
 
-    const expr = try ast.new(ally, .{ .real = real });
+    const expr = try ast.new(ally, null, .{ .real = real });
 
     const text = try std.fmt.allocPrint(ally, "{d:.16}", .{real});
     defer ally.free(text);
@@ -79,8 +91,14 @@ fn testReal(real: Ast.Expr.Real) !void {
 // tests =======================================================================
 
 test "parse-unit" {
+    fluent.init();
+    defer fluent.deinit(ally);
+
     var ast = Ast{};
     defer ast.deinit(ally);
+
+    const unit = try ast.new(ally, null, .unit);
+    try expectExpr(&ast, unit, "()");
 }
 
 test "parse-identifiers" {

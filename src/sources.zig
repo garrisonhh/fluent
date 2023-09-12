@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
 const com = @import("common");
 const blox = @import("blox");
 
@@ -52,6 +53,11 @@ pub fn deinit(ally: Allocator) void {
     }
 
     map.deinit(ally);
+
+    // reset for tests
+    if (builtin.is_test) {
+        map = .{};
+    }
 }
 
 pub fn add(
