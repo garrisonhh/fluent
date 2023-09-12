@@ -1,7 +1,10 @@
 const std = @import("std");
+const options = @import("options");
 const com = @import("common");
 const Codepoint = com.utf8.Codepoint;
 const fluent = @import("../mod.zig");
+
+const logger = std.log.scoped(.lexer);
 
 const LexError = error{InvalidInput};
 pub const Error =
@@ -59,47 +62,24 @@ const Lexer = @This();
 const CodepointCache = com.BoundedRingBuffer(Codepoint, 8);
 const TokenCache = com.BoundedRingBuffer(Token, 8);
 
-source: fluent.Source,
+loc: fluent.Loc,
 iter: Codepoint.Iterator,
 cache: TokenCache = .{},
 
 pub fn init(source: fluent.Source) Lexer {
     const text = fluent.sources.get(source).text;
     return .{
-        .source = source,
+        .loc = .{
+            .source = source,
+            .line_index = 0,
+            .char_index = 0,
+        },
         .iter = Codepoint.parse(text),
     };
 }
 
 pub fn slice(self: Lexer, tok: Token) []const u8 {
     return self.iter.text[tok.start..tok.stop];
-}
-
-/// current source location
-/// *this is pretty expensive!*
-pub fn loc(self: Lexer) Error!fluent.Loc {
-    var l = fluent.Loc{
-        .source = self.source,
-        .line_index = 0,
-        .char_index = 0,
-    };
-
-    // parse unicode to find line/char
-    const total_chars = self.iter.char_index;
-    var i: usize = 0;
-    var iter = Codepoint.parse(self.iter.text);
-    while (try iter.next()) |c| : (i += 1) {
-        if (i >= total_chars) break;
-
-        if (c.c == '\n') {
-            l.line_index += 1;
-            l.char_index = 0;
-        } else {
-            l.char_index += 1;
-        }
-    }
-
-    return l;
 }
 
 // forwarded codepoint iterator ================================================
@@ -113,7 +93,21 @@ fn peekC(self: *Lexer) Error!?Codepoint {
 }
 
 fn acceptC(self: *Lexer, c: Codepoint) void {
+    self.loc.char_index += 1;
+    if (c.eql(Codepoint.ct("\n"))) {
+        self.loc.line_index += 1;
+        self.loc.char_index = 0;
+    }
+
     self.iter.accept(c);
+}
+
+fn peekSlice(self: *Lexer, buf: []Codepoint, n: usize) Error![]const Codepoint {
+    return try self.iter.peekSlice(buf, n);
+}
+
+fn acceptSlice(self: *Lexer, str: []const Codepoint) void {
+    for (str) |c| self.acceptC(c);
 }
 
 // codepoint classification ====================================================
@@ -213,16 +207,17 @@ fn skipSpaces(self: *Lexer) Error!void {
 fn lex(self: *Lexer) Error!?Token {
     try self.skipSpaces();
 
+    const start_loc = self.loc;
     const start_index = self.index();
     const start_ch = try self.peekC() orelse return null;
 
     const tag: Token.Tag = for (Symbol.list) |sym| {
         // symbols
         var buf: [8]Codepoint = undefined;
-        const got = try self.iter.peekSlice(&buf, sym.str.len);
+        const got = try self.peekSlice(&buf, sym.str.len);
 
         if (sym.eql(got)) {
-            self.iter.acceptSlice(got);
+            self.acceptSlice(got);
             break sym.tag;
         }
     } else if (isIdentStart(start_ch)) tok: {
@@ -270,11 +265,19 @@ fn lex(self: *Lexer) Error!?Token {
 
     const stop_index = self.index();
 
-    return Token{
+    const token = Token{
         .tag = tag,
         .start = start_index,
         .stop = stop_index,
     };
+
+    logger.debug("{s:16} `{s}` at {}", .{
+        @tagName(token.tag),
+        self.slice(token),
+        start_loc,
+    });
+
+    return token;
 }
 
 /// fill cache with the next `count` tokens

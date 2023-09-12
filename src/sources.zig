@@ -15,7 +15,7 @@ pub const File = struct {
 pub const Loc = packed struct(u64) {
     const Self = @This();
 
-    src: Source,
+    source: Source,
     line_index: u32,
     char_index: u16,
 
@@ -34,7 +34,7 @@ pub const Loc = packed struct(u64) {
         writer: anytype,
     ) @TypeOf(writer).Error!void {
         try writer.print("{s}:{d}:{d}", .{
-            get(self.src),
+            get(self.source).name,
             self.lineno(),
             self.charno(),
         });

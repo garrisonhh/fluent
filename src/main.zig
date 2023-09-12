@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 const blox = @import("blox");
 const fluent = @import("mod.zig");
 
+pub const std_options = fluent.std_options;
+
 fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var ast = try fluent.parse(ally, source);
     defer ast.deinit(ally);
