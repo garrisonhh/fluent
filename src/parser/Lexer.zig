@@ -1,6 +1,7 @@
 const std = @import("std");
 const com = @import("common");
 const Codepoint = com.utf8.Codepoint;
+const fluent = @import("../mod.zig");
 
 const LexError = error{InvalidInput};
 pub const Error =
@@ -58,20 +59,52 @@ const Lexer = @This();
 const CodepointCache = com.BoundedRingBuffer(Codepoint, 8);
 const TokenCache = com.BoundedRingBuffer(Token, 8);
 
+source: fluent.Source,
 iter: Codepoint.Iterator,
 cache: TokenCache = .{},
 
-pub fn init(text: []const u8) Lexer {
-    return .{ .iter = Codepoint.parse(text) };
+pub fn init(source: fluent.Source) Lexer {
+    const text = fluent.sources.get(source).text;
+    return .{
+        .source = source,
+        .iter = Codepoint.parse(text),
+    };
 }
 
 pub fn slice(self: Lexer, tok: Token) []const u8 {
     return self.iter.text[tok.start..tok.stop];
 }
 
+/// current source location
+/// *this is pretty expensive!*
+pub fn loc(self: Lexer) Error!fluent.Loc {
+    var l = fluent.Loc{
+        .source = self.source,
+        .line_index = 0,
+        .char_index = 0,
+    };
+
+    // parse unicode to find line/char
+    const total_chars = self.iter.char_index;
+    var i: usize = 0;
+    var iter = Codepoint.parse(self.iter.text);
+    while (try iter.next()) |c| : (i += 1) {
+        if (i >= total_chars) break;
+
+        if (c.c == '\n') {
+            l.line_index += 1;
+            l.char_index = 0;
+        } else {
+            l.char_index += 1;
+        }
+    }
+
+    return l;
+}
+
 // forwarded codepoint iterator ================================================
 
-fn index(self: *const Lexer) u32 {
+fn index(self: Lexer) u32 {
     return @intCast(self.iter.byte_index);
 }
 

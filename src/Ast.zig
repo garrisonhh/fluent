@@ -173,7 +173,7 @@ pub fn eql(self: *const Ast, a: Node, b: Node) bool {
 
                 return self.exprDataEql(fst_data, snd_data);
             } else unreachable;
-        }
+        },
     }
 }
 

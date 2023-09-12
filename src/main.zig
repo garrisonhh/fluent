@@ -1,13 +1,10 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const blox = @import("blox");
 const fluent = @import("mod.zig");
 
-fn debugParse(text: []const u8, writer: anytype) !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const ally = gpa.allocator();
-
-    var ast = try fluent.parse(ally, text);
+fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
+    var ast = try fluent.parse(ally, source);
     defer ast.deinit(ally);
 
     var mason = blox.Mason.init(ally);
@@ -21,6 +18,13 @@ fn debugParse(text: []const u8, writer: anytype) !void {
 }
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const ally = gpa.allocator();
+
+    fluent.init();
+    defer fluent.deinit(ally);
+
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
@@ -43,10 +47,12 @@ pub fn main() !void {
         \\  ()
         \\
         \\def e
-        \\  &&std::os::linux.read 1 4096 &buf
+        \\  &&std::os::linux.read 4096 &buf;
+        \\  &(&fun) arg1 arg2
     ;
+    const source = try fluent.sources.add(ally, "test", text);
 
-    try debugParse(text, stdout);
+    try debugParse(ally, source, stdout);
 
     try bw.flush();
 }

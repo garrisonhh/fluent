@@ -333,16 +333,16 @@ fn parseProgram(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!Ast.Node {
     return try ast.new(ally, .{ .program = try nodes.toOwnedSlice() });
 }
 
-pub const FragmentInto = enum {program, expr};
+pub const FragmentInto = enum { program, expr };
 
 /// parse text into an unattached node with an ast as the context
 pub fn parseFragment(
     ally: Allocator,
     ast: *Ast,
-    text: []const u8,
+    source: fluent.Source,
     comptime into: FragmentInto,
 ) Error!?Ast.Node {
-    var lexer = Lexer.init(text);
+    var lexer = Lexer.init(source);
 
     const parser = switch (into) {
         .program => parseProgram,
@@ -353,11 +353,11 @@ pub fn parseFragment(
 }
 
 /// parse text into an ast
-pub fn parse(ally: Allocator, text: []const u8) Error!Ast {
+pub fn parse(ally: Allocator, source: fluent.Source) Error!Ast {
     var ast = Ast{};
     errdefer ast.deinit(ally);
 
-    ast.root = try parseFragment(ally, &ast, text, .program);
+    ast.root = try parseFragment(ally, &ast, source, .program);
 
     return ast;
 }
