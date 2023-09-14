@@ -27,6 +27,23 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
         },
     };
 
+    // analyze
+    fluent.analyze(&ast, root) catch |e| switch (e) {
+        fluent.SemaError.InvalidType => {
+            const mason = &ast.error_mason;
+
+            for (ast.getErrors()) |err| {
+                const rendered = try err.render(mason);
+                try mason.write(rendered, stderr, .{});
+            }
+
+            return;
+        },
+        else => {
+            return e;
+        },
+    };
+
     // render
     var mason = blox.Mason.init(ally);
     defer mason.deinit();
@@ -39,6 +56,7 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
 }
 
 pub fn main() !void {
+    // init
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const ally = gpa.allocator();
@@ -46,25 +64,16 @@ pub fn main() !void {
     try fluent.init(ally);
     defer fluent.deinit(ally);
 
+    // test source
+    const text =
+        \\let a = ()
+    ;
+    const source = try fluent.sources.add(ally, "test", text);
+
+    // debug parse
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
-
-    const text =
-        \\let a = 123 - 456
-        \\let b = &(&fun) arg1 -arg2
-        \\
-        \\let c =
-        \\  1 * 2 + 3;
-        \\  1 % 3 + 2
-        \\
-        \\let d =
-        \\  if true then
-        \\    f 3
-        \\  else
-        \\    a 5
-    ;
-    const source = try fluent.sources.add(ally, "test", text);
 
     try debugParse(ally, source, stdout);
 

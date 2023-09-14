@@ -10,7 +10,7 @@ const typer = fluent.typer;
 pub const SemaError = error{InvalidType};
 pub const Error =
     Allocator.Error ||
-    Type.RenderError ||
+    typer.RenderError ||
     SemaError;
 
 /// generate an ast error and return error.InvalidType
@@ -63,32 +63,59 @@ fn resolve(
 }
 
 /// dispatch for analysis
-fn analyze(
+fn analyzeExpr(
     ast: *Ast,
     node: Ast.Node,
-    expects: Type,
+    expects: Type.Id,
 ) Error!Type.Id {
-    switch (ast.get(node).*) {
-        .unit => {
+    return switch (ast.get(node).*) {
+        .unit => unit: {
             const unit = typer.predef(.unit);
-            const resolved = try resolve(ast, ast.getLoc(node), expects, unit);
-            try ast.setType(node, resolved);
+
+            const res = try resolve(ast, ast.getLoc(node), expects, unit);
+            try ast.setType(node, res);
+
+            break :unit res;
+        },
+
+        .let => |let| let: {
+            const unit = typer.predef(.unit);
+            const any = typer.predef(.any);
+
+            // let is unit
+            const let_res = try resolve(ast, ast.getLoc(node), expects, unit);
+            try ast.setType(node, let_res);
+
+            // TODO analyze let.name as quoted ident
+
+            // recurse on expr
+            // TODO add type annotation to let expr
+            _ = try analyzeExpr(ast, let.expr, any);
+
+            break :let let_res;
+        },
+
+        .program => |prog| prog: {
+            const unit = typer.predef(.unit);
+            const any = typer.predef(.any);
+
+            // prog is unit
+            const prog_res = try resolve(ast, ast.getLoc(node), expects, unit);
+            try ast.setType(node, prog_res);
+
+            // children are any
+            for (prog) |child| {
+                _ = try analyzeExpr(ast, child, any);
+            }
+
+            break :prog prog_res;
         },
 
         else => |tag| std.debug.panic("TODO analyze {}", .{tag}),
-    }
+    };
 }
 
 /// semantically analyze an expression
-pub fn analyzeExpr(
-    ast: *Ast,
-    node: Ast.Node,
-    expects: Type,
-) Error!void {
-    _ = try analyze(ast, node, expects);
-}
-
-/// semantically analyze a full ast
-pub fn analyzeProgram(ally: Allocator, ast: *Ast) Error!void {
-    try analyzeExpr(ally, ast, ast.root.?, typer.predef(.unit));
+pub fn analyze(ast: *Ast, node: Ast.Node) Error!void {
+    _ = try analyzeExpr(ast, node, typer.predef(.any));
 }
