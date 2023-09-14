@@ -46,7 +46,7 @@ fn expectExpr(ast: *Ast, expected: Ast.Node, text: []const u8) !void {
 }
 
 fn testIdent(ident: []const u8) !void {
-    fluent.init();
+    try fluent.init(ally);
     defer fluent.deinit(ally);
 
     var ast = Ast{};
@@ -59,7 +59,7 @@ fn testIdent(ident: []const u8) !void {
 }
 
 fn testInt(int: Ast.Expr.Int) !void {
-    fluent.init();
+    try fluent.init(ally);
     defer fluent.deinit(ally);
 
     var ast = Ast{};
@@ -74,7 +74,7 @@ fn testInt(int: Ast.Expr.Int) !void {
 }
 
 fn testReal(real: Ast.Expr.Real) !void {
-    fluent.init();
+    try fluent.init(ally);
     defer fluent.deinit(ally);
 
     var ast = Ast{};
@@ -91,7 +91,7 @@ fn testReal(real: Ast.Expr.Real) !void {
 // tests =======================================================================
 
 test "parse-unit" {
-    fluent.init();
+    try fluent.init(ally);
     defer fluent.deinit(ally);
 
     var ast = Ast{};

@@ -12,12 +12,7 @@ pub const Error =
     Lexer.Error ||
     ParseError;
 
-fn invalidSyntax(
-    ally: Allocator,
-    ast: *Ast,
-    loc: ?fluent.Loc,
-    desc: []const u8
-) Error {
+fn invalidSyntax(ally: Allocator, ast: *Ast, loc: ?fluent.Loc, desc: []const u8) Error {
     try ast.addError(ally, loc, desc);
     return ParseError.InvalidSyntax;
 }

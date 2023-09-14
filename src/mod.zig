@@ -27,7 +27,7 @@ const builtin = @import("builtin");
 const options = @import("options");
 const blox = @import("blox");
 
-pub fn init() void {
+pub fn init(ally: Allocator) Allocator.Error!void {
     // log options if requested
     if (options.log_options) {
         const logger = std.log.scoped(.options);
@@ -40,6 +40,9 @@ pub fn init() void {
             });
         }
     }
+
+    // call init functions
+    try typer.init(ally);
 }
 
 pub fn deinit(ally: Allocator) void {

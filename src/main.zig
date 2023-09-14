@@ -44,7 +44,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const ally = gpa.allocator();
 
-    fluent.init();
+    try fluent.init(ally);
     defer fluent.deinit(ally);
 
     const stdout_file = std.io.getStdOut().writer();

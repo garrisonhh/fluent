@@ -9,10 +9,18 @@ const InvalidType = error.InvalidType;
 pub const SemaError = error{InvalidType};
 pub const Error = Allocator.Error || SemaError;
 
-pub fn analyze(
+pub fn analyzeExpr(
     ally: Allocator,
     ast: *Ast,
+    node: Ast.Node,
+    expects: Type.Id,
 ) Error!void {
-    _ = ast;
     _ = ally;
+    _ = ast;
+    _ = node;
+    _ = expects;
+}
+
+pub fn analyzeProgram(ally: Allocator, ast: *Ast) Error!void {
+    try analyzeExpr(ally, ast, ast.root.?, typer.predef(.unit));
 }
