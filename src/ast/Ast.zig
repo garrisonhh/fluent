@@ -207,4 +207,3 @@ pub fn eql(self: *const Ast, a: Node, b: Node) bool {
         },
     }
 }
-

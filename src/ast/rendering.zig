@@ -112,7 +112,8 @@ pub fn renderNode(
                         try mason.newPre(":", .{}),
                     }, .{ .direction = .right });
 
-                    const field_data = try renderFieldData(self,
+                    const field_data = try renderFieldData(
+                        self,
                         mason,
                         field.type,
                         @field(data, field.name),

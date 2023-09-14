@@ -2,6 +2,9 @@
 
 pub const Ast = @import("ast/Ast.zig");
 
+pub const Type = @import("types/type.zig").Type;
+pub const typer = @import("types/typer.zig");
+
 pub const sources = @import("sources.zig");
 pub const Source = sources.Source;
 pub const Loc = sources.Loc;
@@ -26,6 +29,7 @@ const options = @import("options");
 const blox = @import("blox");
 
 pub fn init() void {
+    // log options if requested
     if (options.log_options) {
         const logger = std.log.scoped(.options);
 
@@ -41,6 +45,7 @@ pub fn init() void {
 
 pub fn deinit(ally: Allocator) void {
     sources.deinit(ally);
+    typer.deinit(ally);
 }
 
 /// put this in root!

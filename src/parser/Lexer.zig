@@ -56,7 +56,7 @@ pub const Token = struct {
         _: std.fmt.FormatOptions,
         writer: anytype,
     ) @TypeOf(writer).Error!void {
-        try writer.print("<{} {s}>", .{self.loc, @tagName(self.tag)});
+        try writer.print("<{} {s}>", .{ self.loc, @tagName(self.tag) });
     }
 };
 
