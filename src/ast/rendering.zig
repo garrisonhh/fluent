@@ -1,8 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const blox = @import("blox");
-const Ast = @import("Ast.zig");
-const Node = Ast.Node;
+const fluent = @import("../mod.zig");
+const Ast = fluent.Ast;
+const Type = fluent.Type;
 
 pub const RenderError = blox.Error || std.fmt.AllocPrintError;
 
@@ -12,7 +13,7 @@ const theme = struct {
     const tag = c(.bright, .cyan);
     const data = c(.bright, .magenta);
     const field = c(.normal, .yellow);
-    const ident = c(.bright, .red);
+    const err = c(.bright, .red);
 };
 
 fn renderFieldData(
@@ -31,8 +32,8 @@ fn renderFieldData(
         => try mason.newPre(@tagName(value), .{ .fg = theme.data }),
 
         // child nodes
-        Node => try self.renderNode(mason, value),
-        []const Node => nodes: {
+        Ast.Node => try self.renderNode(mason, value),
+        []const Ast.Node => nodes: {
             var divs = std.ArrayList(blox.Div).init(ally);
             defer divs.deinit();
 
@@ -54,7 +55,7 @@ fn renderFieldData(
 pub fn renderNode(
     self: *const Ast,
     mason: *blox.Mason,
-    node: Node,
+    node: Ast.Node,
 ) RenderError!blox.Div {
     const indent = try mason.newSpacer(2, 0, .{});
     const space = try mason.newSpacer(1, 0, .{});
@@ -63,19 +64,31 @@ pub fn renderNode(
     const ally = mason.ally;
     const expr = self.get(node).*;
 
+    const typing = if (self.getType(node)) |t|
+        try Type.renderId(mason, t)
+    else
+        try mason.newPre("untyped", .{ .fg = theme.err });
+
     const tag = try mason.newPre(@tagName(expr), .{ .fg = theme.tag });
+
+    const label = try mason.newBox(&.{
+        tag,
+        try mason.newPre(" <", .{}),
+        typing,
+        try mason.newPre(">", .{}),
+    }, .{ .direction = .right });
 
     return switch (expr) {
         // literals
         .unit => try mason.newBox(&.{
-            tag,
+            label,
             space,
             try mason.newPre("()", .{ .fg = theme.data }),
         }, .{ .direction = .right }),
         .ident => |ident| try mason.newBox(&.{
-            tag,
+            label,
             space,
-            try mason.newPre(ident, .{ .fg = theme.ident }),
+            try mason.newPre(ident, .{}),
         }, .{ .direction = .right }),
 
         inline .int, .real => |n| n: {
@@ -83,7 +96,7 @@ pub fn renderNode(
             defer ally.free(text);
 
             break :n try mason.newBox(&.{
-                tag,
+                label,
                 space,
                 try mason.newPre(text, .{ .fg = theme.data }),
             }, .{ .direction = .right });
@@ -101,7 +114,7 @@ pub fn renderNode(
             const Data = @TypeOf(data);
             const info = @typeInfo(Data);
 
-            if (Data != Node and info == .Struct) {
+            if (Data != Ast.Node and info == .Struct) {
                 // render individual fields
                 var fields = std.ArrayList(blox.Div).init(ally);
                 defer fields.deinit();
@@ -143,7 +156,7 @@ pub fn renderNode(
                 const data_div = try mason.newBox(fields.items, .{});
 
                 break :div try mason.newBox(&.{
-                    tag,
+                    label,
                     try mason.newBox(&.{
                         indent,
                         data_div,
@@ -156,12 +169,12 @@ pub fn renderNode(
 
                 break :div switch (data_height) {
                     0...1 => try mason.newBox(&.{
-                        tag,
+                        label,
                         space,
                         data_div,
                     }, .{ .direction = .right }),
                     else => try mason.newBox(&.{
-                        tag,
+                        label,
                         try mason.newBox(&.{
                             indent,
                             data_div,

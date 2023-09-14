@@ -7,6 +7,7 @@ const com = @import("common");
 const rendering = @import("rendering.zig");
 const fluent = @import("../mod.zig");
 const Loc = fluent.Loc;
+const Type = fluent.Type;
 
 pub const Node = com.Ref(.ast_node, 32);
 const NodeMap = com.RefMap(Node, Expr);
@@ -96,6 +97,7 @@ map: NodeMap = .{},
 root: ?Node = null,
 
 locs: std.AutoHashMapUnmanaged(Node, Loc) = .{},
+types: std.AutoHashMapUnmanaged(Node, Type.Id) = .{},
 
 pub fn deinit(self: *Ast, ally: Allocator) void {
     var exprs = self.map.iterator();
@@ -103,6 +105,7 @@ pub fn deinit(self: *Ast, ally: Allocator) void {
 
     self.map.deinit(ally);
     self.locs.deinit(ally);
+    self.types.deinit(ally);
 
     self.* = undefined;
 }
@@ -131,6 +134,19 @@ pub fn get(self: *const Ast, node: Node) *const Expr {
 
 pub fn getLoc(self: *const Ast, node: Node) ?Loc {
     return self.locs.get(node);
+}
+
+pub fn setType(
+    self: *Ast,
+    ally: Allocator,
+    node: Node,
+    t: Type.Id,
+) Allocator.Error!void {
+    try self.types.put(ally, node, t);
+}
+
+pub fn getType(self: *const Ast, node: Node) ?Type.Id {
+    return self.types.get(node);
 }
 
 fn exprDataEql(self: *const Ast, a: anytype, b: @TypeOf(a)) bool {

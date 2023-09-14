@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
+const blox = @import("blox");
+const rendering = @import("rendering.zig");
 
 pub const Type = union(enum) {
     const Self = @This();
@@ -25,6 +27,14 @@ pub const Type = union(enum) {
             .anyfloat,
             => {},
         }
+    }
+
+    pub const RenderError = rendering.RenderError;
+
+    pub const renderId = rendering.renderTypeId;
+
+    pub fn render(self: Self, mason: *blox.Mason) RenderError!blox.Div {
+        return rendering.renderType(mason, self);
     }
 
     pub fn eql(self: Self, other: Self) bool {
