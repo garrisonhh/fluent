@@ -4,6 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const com = @import("common");
+const blox = @import("blox");
 const rendering = @import("rendering.zig");
 const fluent = @import("../mod.zig");
 const Loc = fluent.Loc;
@@ -14,7 +15,7 @@ const NodeMap = com.RefMap(Node, Expr);
 
 pub const Error = struct {
     loc: ?Loc,
-    desc: []const u8,
+    desc: blox.Div,
 
     pub const render = rendering.renderAstError;
 };
@@ -100,20 +101,33 @@ pub const Expr = union(enum) {
 
 const Ast = @This();
 
+ally: Allocator,
 map: NodeMap = .{},
-root: ?Node = null,
 
-errors: std.ArrayListUnmanaged(Error) = .{},
+// node metadata
 locs: std.AutoHashMapUnmanaged(Node, Loc) = .{},
 types: std.AutoHashMapUnmanaged(Node, Type.Id) = .{},
 
-pub fn deinit(self: *Ast, ally: Allocator) void {
+// errors
+error_mason: blox.Mason,
+errors: std.ArrayListUnmanaged(Error) = .{},
+
+pub fn init(ally: Allocator) Ast {
+    return Ast{
+        .ally = ally,
+        .error_mason = blox.Mason.init(ally),
+    };
+}
+
+pub fn deinit(self: *Ast) void {
+    const ally = self.ally;
+
     var exprs = self.map.iterator();
     while (exprs.next()) |expr| expr.deinit(ally);
     self.map.deinit(ally);
 
-    for (self.errors.items) |err| ally.free(err.desc);
     self.errors.deinit(ally);
+    self.error_mason.deinit();
 
     self.locs.deinit(ally);
     self.types.deinit(ally);
@@ -122,19 +136,13 @@ pub fn deinit(self: *Ast, ally: Allocator) void {
 }
 
 pub const RenderError = rendering.RenderError;
-pub const renderNode = rendering.renderNode;
 pub const render = rendering.render;
 
 /// add an error to the error list
-pub fn addError(
-    self: *Ast,
-    ally: Allocator,
-    loc: ?Loc,
-    desc: []const u8,
-) Allocator.Error!void {
-    try self.errors.append(ally, Error{
+pub fn addError(self: *Ast, loc: ?Loc, desc: blox.Div) Allocator.Error!void {
+    try self.errors.append(self.ally, Error{
         .loc = loc,
-        .desc = try ally.dupe(u8, desc),
+        .desc = desc,
     });
 }
 
@@ -143,16 +151,11 @@ pub fn getErrors(self: *const Ast) []const Error {
     return self.errors.items;
 }
 
-pub fn new(
-    self: *Ast,
-    ally: Allocator,
-    loc: ?Loc,
-    expr: Expr,
-) Allocator.Error!Node {
+pub fn new(self: *Ast, loc: ?Loc, expr: Expr) Allocator.Error!Node {
+    const ally = self.ally;
+
     const node = try self.map.put(ally, expr);
-    if (loc) |x| {
-        try self.locs.putNoClobber(ally, node, x);
-    }
+    if (loc) |x| try self.locs.put(ally, node, x);
 
     return node;
 }
@@ -165,12 +168,8 @@ pub fn getLoc(self: *const Ast, node: Node) ?Loc {
     return self.locs.get(node);
 }
 
-pub fn setType(
-    self: *Ast,
-    ally: Allocator,
-    node: Node,
-    t: Type.Id,
-) Allocator.Error!void {
+pub fn setType(self: *Ast, node: Node, t: Type.Id) Allocator.Error!void {
+    const ally = self.ally;
     try self.types.put(ally, node, t);
 }
 

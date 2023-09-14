@@ -4,6 +4,7 @@ const blox = @import("blox");
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
 const Type = fluent.Type;
+const typer = fluent.typer;
 
 pub const RenderError = blox.Error || std.fmt.AllocPrintError;
 
@@ -26,7 +27,7 @@ pub fn renderAstError(
         try mason.newPre("[", .{}),
         try mason.newPre("error", .{ .fg = theme.err }),
         try mason.newPre("] ", .{}),
-        try mason.newPre(self.desc, .{}),
+        self.desc,
     }, .{ .direction = .right });
 
     divs.appendAssumeCapacity(desc);
@@ -54,13 +55,13 @@ fn renderFieldData(
         => try mason.newPre(@tagName(value), .{ .fg = theme.data }),
 
         // child nodes
-        Ast.Node => try self.renderNode(mason, value),
+        Ast.Node => try self.render(mason, value),
         []const Ast.Node => nodes: {
             var divs = std.ArrayList(blox.Div).init(ally);
             defer divs.deinit();
 
             for (value) |node| {
-                try divs.append(try self.renderNode(mason, node));
+                try divs.append(try self.render(mason, node));
             }
 
             break :nodes try mason.newBox(divs.items, .{});
@@ -74,7 +75,7 @@ fn renderFieldData(
     };
 }
 
-pub fn renderNode(
+pub fn render(
     self: *const Ast,
     mason: *blox.Mason,
     node: Ast.Node,
@@ -87,7 +88,7 @@ pub fn renderNode(
     const expr = self.get(node).*;
 
     const typing = if (self.getType(node)) |t|
-        try Type.renderId(mason, t)
+        try typer.render(mason, t)
     else
         try mason.newPre("untyped", .{ .fg = theme.err });
 
@@ -206,12 +207,4 @@ pub fn renderNode(
             }
         },
     };
-}
-
-pub fn render(self: *const Ast, mason: *blox.Mason) RenderError!blox.Div {
-    if (self.root) |root| {
-        return try self.renderNode(mason, root);
-    }
-
-    return try mason.newPre("<empty ast>", .{});
 }

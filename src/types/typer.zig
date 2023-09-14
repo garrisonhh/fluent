@@ -3,6 +3,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
+const rendering = @import("rendering.zig");
 const Type = @import("type.zig").Type;
 
 const TypeHashMapContext = struct {
@@ -31,17 +32,19 @@ const TypeHashMap = std.HashMapUnmanaged(
 pub const PredefinedType = enum {
     const Self = @This();
 
+    any,
     unit,
     bool,
-    anyint,
-    anyfloat,
+    int,
+    float,
 
     fn initType(self: Self) Type {
         return switch (self) {
-            inline .unit,
+            inline .any,
+            .unit,
             .bool,
-            .anyint,
-            .anyfloat,
+            .int,
+            .float,
             => |tag| @unionInit(Type, @tagName(tag), {}),
         };
     }
@@ -59,6 +62,9 @@ pub fn init(ally: Allocator) Allocator.Error!void {
         predef_cache.put(p, id);
     }
 }
+
+pub const RenderError = rendering.RenderError;
+pub const render = rendering.renderTypeId;
 
 pub fn deinit(ally: Allocator) void {
     types.deinit(ally);

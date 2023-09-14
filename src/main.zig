@@ -8,16 +8,15 @@ pub const std_options = fluent.std_options;
 
 fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     // parse
-    var ast = fluent.Ast{};
-    defer ast.deinit(ally);
+    var ast = fluent.Ast.init(ally);
+    defer ast.deinit();
 
-    ast.root = fluent.parse(ally, &ast, source, .program) catch |e| switch (e) {
+    const root = fluent.parse(&ast, source, .program) catch |e| switch (e) {
         fluent.ParseError.InvalidSyntax => {
-            var mason = blox.Mason.init(ally);
-            defer mason.deinit();
+            const mason = &ast.error_mason;
 
             for (ast.getErrors()) |err| {
-                const rendered = try err.render(&mason);
+                const rendered = try err.render(mason);
                 try mason.write(rendered, stderr, .{});
             }
 
@@ -32,7 +31,7 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var mason = blox.Mason.init(ally);
     defer mason.deinit();
 
-    const rendered = try ast.render(&mason);
+    const rendered = try ast.render(&mason, root);
 
     try writer.print("[ast]\n", .{});
     try mason.write(rendered, writer, .{});
