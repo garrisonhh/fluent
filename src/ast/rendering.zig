@@ -16,6 +16,28 @@ const theme = struct {
     const err = c(.bright, .red);
 };
 
+pub fn renderAstError(
+    self: Ast.Error,
+    mason: *blox.Mason,
+) RenderError!blox.Div {
+    var divs = std.BoundedArray(blox.Div, 2){};
+
+    const desc = try mason.newBox(&.{
+        try mason.newPre("[", .{}),
+        try mason.newPre("error", .{ .fg = theme.err }),
+        try mason.newPre("] ", .{}),
+        try mason.newPre(self.desc, .{}),
+    }, .{ .direction = .right });
+
+    divs.appendAssumeCapacity(desc);
+
+    if (self.loc) |loc| {
+        divs.appendAssumeCapacity(try fluent.sources.render(mason, loc));
+    }
+
+    return try mason.newBox(divs.slice(), .{});
+}
+
 fn renderFieldData(
     self: *const Ast,
     mason: *blox.Mason,

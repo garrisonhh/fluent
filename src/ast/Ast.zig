@@ -12,6 +12,13 @@ const Type = fluent.Type;
 pub const Node = com.Ref(.ast_node, 32);
 const NodeMap = com.RefMap(Node, Expr);
 
+pub const Error = struct {
+    loc: ?Loc,
+    desc: []const u8,
+
+    pub const render = rendering.renderAstError;
+};
+
 pub const UnaryOp = enum {
     negate,
     addr,
@@ -96,14 +103,18 @@ const Ast = @This();
 map: NodeMap = .{},
 root: ?Node = null,
 
+errors: std.ArrayListUnmanaged(Error) = .{},
 locs: std.AutoHashMapUnmanaged(Node, Loc) = .{},
 types: std.AutoHashMapUnmanaged(Node, Type.Id) = .{},
 
 pub fn deinit(self: *Ast, ally: Allocator) void {
     var exprs = self.map.iterator();
     while (exprs.next()) |expr| expr.deinit(ally);
-
     self.map.deinit(ally);
+
+    for (self.errors.items) |err| ally.free(err.desc);
+    self.errors.deinit(ally);
+
     self.locs.deinit(ally);
     self.types.deinit(ally);
 
@@ -113,6 +124,24 @@ pub fn deinit(self: *Ast, ally: Allocator) void {
 pub const RenderError = rendering.RenderError;
 pub const renderNode = rendering.renderNode;
 pub const render = rendering.render;
+
+/// add an error to the error list
+pub fn addError(
+    self: *Ast,
+    ally: Allocator,
+    loc: ?Loc,
+    desc: []const u8,
+) Allocator.Error!void {
+    try self.errors.append(ally, Error{
+        .loc = loc,
+        .desc = try ally.dupe(u8, desc),
+    });
+}
+
+/// all of the stored errors
+pub fn getErrors(self: *const Ast) []const Error {
+    return self.errors.items;
+}
 
 pub fn new(
     self: *Ast,

@@ -6,12 +6,21 @@ const Lexer = @import("Lexer.zig");
 const Token = Lexer.Token;
 const literals = @import("literals.zig");
 
-const InvalidSyntax = error.InvalidSyntax;
 pub const ParseError = error{InvalidSyntax};
 pub const Error =
     Allocator.Error ||
     Lexer.Error ||
     ParseError;
+
+fn invalidSyntax(
+    ally: Allocator,
+    ast: *Ast,
+    loc: ?fluent.Loc,
+    desc: []const u8
+) Error {
+    try ast.addError(ally, loc, desc);
+    return ParseError.InvalidSyntax;
+}
 
 fn parseToken(lexer: *Lexer, tag: Token.Tag) Error!?Token {
     const token = try lexer.peek() orelse {
@@ -66,7 +75,8 @@ fn prefixPrecedenceParser(
                 }
 
                 // an inner expression was expected
-                return InvalidSyntax;
+                const desc = "expected expression after unary operator";
+                return invalidSyntax(ally, ast, lexer.nextLoc(), desc);
             };
 
             // create unary stuff
@@ -111,7 +121,8 @@ fn binaryLeftPrecedenceParser(
 
                 // parse rhs
                 const rhs = try inner_parser(ally, ast, lexer) orelse {
-                    return InvalidSyntax;
+                    const desc = "expected expression after binary operator";
+                    return invalidSyntax(ally, ast, lexer.nextLoc(), desc);
                 };
 
                 // convert to ast node
@@ -157,7 +168,8 @@ fn binaryRightPrecedenceParser(
 
             // parse rhs
             const rhs = try binaryParser(ally, ast, lexer) orelse {
-                return InvalidSyntax;
+                const desc = "expected expression after binary operator";
+                return invalidSyntax(ally, ast, lexer.nextLoc(), desc);
             };
 
             // convert to ast node
@@ -222,7 +234,8 @@ fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
         .int => int: {
             const text = lexer.slice(pk);
             const int = literals.parseDecimalInt(text) catch {
-                break :int InvalidSyntax;
+                const desc = "invalid integer literal";
+                break :int invalidSyntax(ally, ast, pk.loc, desc);
             };
 
             lexer.accept(pk);
@@ -231,7 +244,8 @@ fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
         .real => real: {
             const text = lexer.slice(pk);
             const real = literals.parseDecimalReal(text) catch {
-                break :real InvalidSyntax;
+                const desc = "invalid float literal";
+                break :real invalidSyntax(ally, ast, pk.loc, desc);
             };
 
             lexer.accept(pk);
@@ -244,7 +258,8 @@ fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 
             // unit
             const pk2 = try lexer.peek() orelse {
-                break :parens InvalidSyntax;
+                const desc = "unexpected end of file";
+                break :parens invalidSyntax(ally, ast, lexer.nextLoc(), desc);
             };
             if (pk2.tag == .rparen) {
                 lexer.accept(pk2);
@@ -253,10 +268,12 @@ fn parseAtom(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 
             // wrapped expr
             const inner = try parseExpr(ally, ast, lexer) orelse {
-                break :parens InvalidSyntax;
+                const desc = "expected inner expression for parentheses";
+                break :parens invalidSyntax(ally, ast, lexer.nextLoc(), desc);
             };
             _ = try parseToken(lexer, .rparen) orelse {
-                break :parens InvalidSyntax;
+                const desc = "expected `)`";
+                break :parens invalidSyntax(ally, ast, lexer.nextLoc(), desc);
             };
 
             break :parens try ast.new(ally, pk.loc, .{ .parens = inner });
@@ -337,19 +354,19 @@ const parseDef = binaryPrecedenceParser(
 
 fn parseLet(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     const let = try parseToken(lexer, .let) orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected `let`");
     };
 
     const name = try parseExpr(ally, ast, lexer) orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected decl name");
     };
 
     _ = try parseToken(lexer, .equals) orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected `=`");
     };
 
     const expr = try parseExpr(ally, ast, lexer) orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected decl expression");
     };
 
     return try ast.new(ally, let.loc, .{
@@ -362,27 +379,28 @@ fn parseLet(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 
 fn parseIf(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     const @"if" = try parseToken(lexer, .@"if") orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected `if`");
     };
 
     const cond = try parseExpr(ally, ast, lexer) orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected if condition");
     };
 
     _ = try parseToken(lexer, .then) orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected `then`");
     };
 
     const if_true = try parseExpr(ally, ast, lexer) orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected branch when true");
     };
 
     _ = try parseToken(lexer, .@"else") orelse {
-        return InvalidSyntax;
+        return invalidSyntax(ally, ast, lexer.nextLoc(), "expected `else`");
     };
 
     const if_false = try parseExpr(ally, ast, lexer) orelse {
-        return InvalidSyntax;
+        const desc = "expected branch when false";
+        return invalidSyntax(ally, ast, lexer.nextLoc(), desc);
     };
 
     return try ast.new(ally, @"if".loc, .{
@@ -409,7 +427,7 @@ fn parseExpr(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 
 /// a program is just a series of top level expressions
 fn parseProgram(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!Ast.Node {
-    const start_loc = lexer.loc;
+    const start_loc = lexer.nextLoc();
 
     var nodes = std.ArrayList(Ast.Node).init(ally);
     defer nodes.deinit();
@@ -423,31 +441,20 @@ fn parseProgram(ally: Allocator, ast: *Ast, lexer: *Lexer) Error!Ast.Node {
     });
 }
 
-pub const FragmentInto = enum { program, expr };
+pub const Into = enum { program, expr };
 
-/// parse text into an unattached node with an ast as the context
-pub fn parseFragment(
+/// parse text into an ast node
+/// *remember to check ast for errors if there is a syntax error!*
+pub fn parse(
     ally: Allocator,
     ast: *Ast,
     source: fluent.Source,
-    comptime into: FragmentInto,
+    comptime into: Into,
 ) Error!?Ast.Node {
     var lexer = Lexer.init(source);
 
-    const parser = switch (into) {
-        .program => parseProgram,
-        .expr => parseExpr,
+    return switch (into) {
+        .program => try parseProgram(ally, ast, &lexer),
+        .expr => try parseExpr(ally, ast, &lexer),
     };
-
-    return try parser(ally, ast, &lexer);
-}
-
-/// parse text into an ast
-pub fn parse(ally: Allocator, source: fluent.Source) Error!Ast {
-    var ast = Ast{};
-    errdefer ast.deinit(ally);
-
-    ast.root = try parseFragment(ally, &ast, source, .program);
-
-    return ast;
 }

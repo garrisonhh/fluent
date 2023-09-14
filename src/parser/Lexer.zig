@@ -82,11 +82,20 @@ pub fn init(source: fluent.Source) Lexer {
     };
 }
 
+/// what the lexer is looking at
+pub fn nextLoc(self: *Lexer) Loc {
+    if (self.cache.len > 0) {
+        return self.cache.get(0).loc;
+    }
+
+    return self.loc;
+}
+
 pub fn slice(self: Lexer, tok: Token) []const u8 {
     return self.iter.text[tok.start..tok.stop];
 }
 
-// forwarded codepoint iterator ================================================
+// wrapped codepoint iterator ==================================================
 
 fn index(self: Lexer) u32 {
     return @intCast(self.iter.byte_index);

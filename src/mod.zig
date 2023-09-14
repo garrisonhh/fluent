@@ -11,8 +11,7 @@ pub const Loc = sources.Loc;
 
 const parser = @import("parser/parser.zig");
 pub const ParseError = parser.Error;
-pub const ParseFragmentInto = parser.FragmentInto;
-pub const parseFragment = parser.parseFragment;
+pub const ParseInto = parser.Into;
 pub const parse = parser.parse;
 
 const sema = @import("sema/sema.zig");

@@ -1,4 +1,5 @@
 const std = @import("std");
+const stderr = std.io.getStdErr().writer();
 const Allocator = std.mem.Allocator;
 const blox = @import("blox");
 const fluent = @import("mod.zig");
@@ -6,9 +7,28 @@ const fluent = @import("mod.zig");
 pub const std_options = fluent.std_options;
 
 fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
-    var ast = try fluent.parse(ally, source);
+    // parse
+    var ast = fluent.Ast{};
     defer ast.deinit(ally);
 
+    ast.root = fluent.parse(ally, &ast, source, .program) catch |e| switch (e) {
+        fluent.ParseError.InvalidSyntax => {
+            var mason = blox.Mason.init(ally);
+            defer mason.deinit();
+
+            for (ast.getErrors()) |err| {
+                const rendered = try err.render(&mason);
+                try mason.write(rendered, stderr, .{});
+            }
+
+            return;
+        },
+        else => {
+            return e;
+        },
+    };
+
+    // render
     var mason = blox.Mason.init(ally);
     defer mason.deinit();
 
