@@ -314,7 +314,7 @@ fn lex(self: *Lexer) Error!?Token {
         logger.debug("{s} `{s}`\n{}", .{
             @tagName(token.tag),
             self.slice(token),
-            mason.fmt(rendered, .{ .enable_colors = false }),
+            mason.fmt(rendered, .{}),
         });
     }
 

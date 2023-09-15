@@ -97,33 +97,53 @@ pub const std_options = struct {
         var mason = blox.Mason.init(ally);
         defer mason.deinit();
 
-        // render text
+        // render logger tag
+        const tag = try mason.newBox(&.{
+            try mason.newPre("[", .{}),
+            try mason.newPre(@tagName(scope), .{}),
+            try mason.newPre("|", .{}),
+            try mason.newPre(logLevelText(level), .{
+                .fg = logLevelColor(level),
+            }),
+            try mason.newPre("] ", .{}),
+        }, .{ .direction = .right });
+
+        // render lines of text with my blox decorators
+        // this is done by intermixing std.fmt with blox in order to maintain
+        // compatibility with consumer expectations
         const text = try std.fmt.allocPrint(ally, format, args);
         defer ally.free(text);
 
+        // prune extra lines
         var slice = text;
         while (std.mem.endsWith(u8, slice, "\n")) {
             slice.len -= 1;
         }
 
-        // render log
-        const tag = try mason.newBox(&.{
-            try mason.newPre("[", .{}),
-            try mason.newPre(logLevelText(level), .{
-                .fg = logLevelColor(level),
-            }),
-            try mason.newPre("|", .{}),
-            try mason.newPre(@tagName(scope), .{}),
-            try mason.newPre("] ", .{}),
-        }, .{ .direction = .right });
+        const is_single_line = std.mem.count(u8, slice, "\n") == 0;
+        if (is_single_line) {
+            const deco_fmt = mason.fmt(tag, .{ .print_final_newline = false });
+            try stderr.print("{}{s}\n", .{deco_fmt, slice});
+        } else {
+            // multiline
+            const indent = try mason.newPre("| ", .{
+                .fg = blox.Color.init(.bright, .black),
+            });
 
-        const rendered = try mason.newBox(&.{
-            tag,
-            try mason.newPre(slice, .{}),
-        }, .{ .direction = .right });
+            try mason.write(tag, stderr, .{});
 
-        // write to stderr
-        try mason.write(rendered, stderr, .{});
+            var lines = std.mem.splitScalar(u8, slice, '\n');
+            var i: usize = 0;
+            while (lines.next()) |line| : (i += 1) {
+                const deco_fmt = mason.fmt(indent, .{
+                    .print_final_newline = false,
+                });
+
+                try stderr.print("{}{s}\n", .{deco_fmt, line});
+            }
+
+            try stderr.writeByte('\n');
+        }
     }
 
     pub fn logFn(
