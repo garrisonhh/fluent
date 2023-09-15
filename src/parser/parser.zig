@@ -247,6 +247,11 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
             lexer.accept(pk);
             break :real try ast.new(pk.loc, .{ .real = real });
         },
+        inline .true, .false => |tag| bool: {
+            const value = comptime tag == .true;
+            lexer.accept(pk);
+            break :bool try ast.new(pk.loc, .{ .bool = value });
+        },
 
         // parens
         .lparen => parens: {

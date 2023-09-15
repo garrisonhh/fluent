@@ -67,6 +67,7 @@ pub const Expr = union(enum) {
     };
 
     unit,
+    bool: bool,
     ident: []const u8,
     int: Int,
     real: Real,
@@ -82,6 +83,7 @@ pub const Expr = union(enum) {
     fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
             .unit,
+            .bool,
             .int,
             .real,
             .parens,

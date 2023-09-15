@@ -47,8 +47,6 @@ fn renderFieldData(
 ) RenderError!blox.Div {
     const ally = mason.ally;
     return switch (T) {
-        void => try mason.newPre("", .{}),
-
         // enums
         Ast.UnaryOp,
         Ast.BinaryOp,
@@ -80,6 +78,7 @@ pub fn render(
     mason: *blox.Mason,
     node: Ast.Node,
 ) RenderError!blox.Div {
+    const span = blox.BoxOptions{ .direction = .right };
     const indent = try mason.newSpacer(2, 0, .{});
     const space = try mason.newSpacer(1, 0, .{});
 
@@ -99,7 +98,7 @@ pub fn render(
         try mason.newPre(" <", .{}),
         typing,
         try mason.newPre(">", .{}),
-    }, .{ .direction = .right });
+    }, span);
 
     return switch (expr) {
         // literals
@@ -107,22 +106,24 @@ pub fn render(
             label,
             space,
             try mason.newPre("()", .{ .fg = theme.data }),
-        }, .{ .direction = .right }),
-        .ident => |ident| try mason.newBox(&.{
-            label,
-            space,
-            try mason.newPre(ident, .{}),
-        }, .{ .direction = .right }),
+        }, span),
+        .ident => |ident| ident: {
+            const data = try mason.newPre(ident, .{});
+            break :ident try mason.newBox(&.{ label, space, data }, span);
+        },
+
+        .bool => |b| b: {
+            const str = if (b) "true" else "false";
+            const data = try mason.newPre(str, .{ .fg = theme.data });
+            break :b try mason.newBox(&.{ label, space, data }, span);
+        },
 
         inline .int, .real => |n| n: {
             const text = try std.fmt.allocPrint(ally, "{d}", .{n});
             defer ally.free(text);
 
-            break :n try mason.newBox(&.{
-                label,
-                space,
-                try mason.newPre(text, .{ .fg = theme.data }),
-            }, .{ .direction = .right });
+            const data = try mason.newPre(text, .{ .fg = theme.data });
+            break :n try mason.newBox(&.{ label, space, data }, span);
         },
 
         // containers
@@ -146,7 +147,7 @@ pub fn render(
                     const field_name = try mason.newBox(&.{
                         try mason.newPre(field.name, .{ .fg = theme.field }),
                         try mason.newPre(":", .{}),
-                    }, .{ .direction = .right });
+                    }, span);
 
                     const field_data = try renderFieldData(
                         self,
@@ -162,13 +163,10 @@ pub fn render(
                             field_name,
                             space,
                             field_data,
-                        }, .{ .direction = .right }),
+                        }, span),
                         else => try mason.newBox(&.{
                             field_name,
-                            try mason.newBox(&.{
-                                indent,
-                                field_data,
-                            }, .{ .direction = .right }),
+                            try mason.newBox(&.{ indent, field_data }, span),
                         }, .{}),
                     };
 
@@ -180,10 +178,7 @@ pub fn render(
 
                 break :div try mason.newBox(&.{
                     label,
-                    try mason.newBox(&.{
-                        indent,
-                        data_div,
-                    }, .{ .direction = .right }),
+                    try mason.newBox(&.{ indent, data_div }, span),
                 }, .{});
             } else {
                 // directly render data for expr
@@ -195,13 +190,10 @@ pub fn render(
                         label,
                         space,
                         data_div,
-                    }, .{ .direction = .right }),
+                    }, span),
                     else => try mason.newBox(&.{
                         label,
-                        try mason.newBox(&.{
-                            indent,
-                            data_div,
-                        }, .{ .direction = .right }),
+                        try mason.newBox(&.{ indent, data_div }, span),
                     }, .{}),
                 };
             }

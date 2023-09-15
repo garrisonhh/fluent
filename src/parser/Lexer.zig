@@ -20,6 +20,8 @@ pub const Token = struct {
         ident,
         int,
         real,
+        true,
+        false,
 
         let,
         @"if",
@@ -146,15 +148,27 @@ const Keyword = struct {
     str: []const u8,
     tag: Token.Tag,
 
-    fn make(str: []const u8, tag: Token.Tag) Self {
-        return .{ .str = str, .tag = tag };
-    }
+    const list: []const Self = kws: {
+        @setEvalBranchQuota(10_000);
 
-    const list = [_]Keyword{
-        make("let", .let),
-        make("if", .@"if"),
-        make("then", .then),
-        make("else", .@"else"),
+        const idents = [_][]const u8{
+            "true",
+            "false",
+            "let",
+            "if",
+            "then",
+            "else",
+        };
+
+        var kws: [idents.len]Self = undefined;
+        for (idents, 0..) |ident, i| {
+            kws[i] = Self{
+                .str = ident,
+                .tag = std.meta.stringToEnum(Token.Tag, ident).?,
+            };
+        }
+
+        break :kws &kws;
     };
 };
 

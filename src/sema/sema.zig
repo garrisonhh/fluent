@@ -62,21 +62,25 @@ fn resolve(
     };
 }
 
-/// dispatch for analysis
-fn analyzeExpr(
+/// resolves and sets the type fo the node
+fn expect(
     ast: *Ast,
     node: Ast.Node,
     expects: Type.Id,
+    actual: Type.Id,
 ) Error!Type.Id {
+    const res = try resolve(ast, ast.getLoc(node), expects, actual);
+    try ast.setType(node, res);
+    return res;
+}
+
+/// dispatch for analysis
+fn analyzeExpr(ast: *Ast, node: Ast.Node, expects: Type.Id) Error!Type.Id {
     return switch (ast.get(node).*) {
-        .unit => unit: {
-            const unit = typer.predef(.unit);
-
-            const res = try resolve(ast, ast.getLoc(node), expects, unit);
-            try ast.setType(node, res);
-
-            break :unit res;
-        },
+        .unit => try expect(ast, node, expects, typer.predef(.unit)),
+        .bool => try expect(ast, node, expects, typer.predef(.bool)),
+        .int => try expect(ast, node, expects, typer.predef(.int)),
+        .real => try expect(ast, node, expects, typer.predef(.float)),
 
         .let => |let| let: {
             const unit = typer.predef(.unit);
