@@ -8,7 +8,6 @@ pub const Type = union(enum) {
     pub const Tag = std.meta.Tag(Self);
     pub const Id = com.Ref(.type, 32);
 
-    any,
     unit,
     ident,
     bool,
@@ -20,7 +19,6 @@ pub const Type = union(enum) {
     pub fn deinit(self: Self, ally: Allocator) void {
         _ = ally;
         switch (self) {
-            .any,
             .unit,
             .ident,
             .bool,

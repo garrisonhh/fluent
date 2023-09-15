@@ -22,87 +22,51 @@ fn invalidType(ast: *Ast, loc: ?Loc, desc: blox.Div) Error {
 fn errorExpected(
     ast: *Ast,
     loc: ?Loc,
-    expects: Type.Id,
-    actual: Type.Id,
+    expected: Type.Id,
+    found: Type.Id,
 ) Error {
     const mason = &ast.error_mason;
     const desc = try mason.newBox(&.{
         try mason.newPre("expected ", .{}),
-        try typer.render(mason, expects),
+        try typer.render(mason, expected),
         try mason.newPre(", found ", .{}),
-        try typer.render(mason, actual),
-    }, .{ .direction = .left });
+        try typer.render(mason, found),
+    }, .{ .direction = .right });
 
     return invalidType(ast, loc, desc);
 }
 
-/// resolves a basic outer/inner type expectation
-fn resolve(
-    ast: *Ast,
-    loc: ?Loc,
-    expected: Type.Id,
-    actual: Type.Id,
-) Error!Type.Id {
-    const exp = typer.get(expected);
-    return switch (exp.*) {
-        .any => actual,
-
-        // exact match expected
-        .unit,
-        .ident,
-        .bool,
-        .int,
-        .float,
-        => exact: {
-            if (!expected.eql(actual)) {
-                break :exact errorExpected(ast, loc, expected, actual);
-            }
-
-            break :exact expected;
-        },
-    };
-}
-
-/// resolves and sets the type fo the node
-fn expect(
-    ast: *Ast,
-    node: Ast.Node,
-    expects: Type.Id,
-    actual: Type.Id,
-) Error!Type.Id {
-    const res = try resolve(ast, ast.getLoc(node), expects, actual);
-    try ast.setType(node, res);
-    return res;
+/// analyze a node and expect the type of this node to match the expected type
+fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
+    const actual = try analyzeExpr(ast, node);
+    if (!actual.eql(expected)) {
+        return errorExpected(ast, ast.getLoc(node), expected, actual);
+    }
 }
 
 /// dispatch for analysis
-fn analyzeExpr(ast: *Ast, node: Ast.Node, expects: Type.Id) Error!Type.Id {
+fn analyzeExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
     return switch (ast.get(node).*) {
-        .unit => try expect(ast, node, expects, typer.predef(.unit)),
-        .ident => try expect(ast, node, expects, typer.predef(.ident)),
-        .bool => try expect(ast, node, expects, typer.predef(.bool)),
-        .int => try expect(ast, node, expects, typer.predef(.int)),
-        .real => try expect(ast, node, expects, typer.predef(.float)),
+        .unit => try ast.setType(node, typer.predef(.unit)),
+        .ident => try ast.setType(node, typer.predef(.ident)),
+        .bool => try ast.setType(node, typer.predef(.bool)),
+        .int => try ast.setType(node, typer.predef(.int)),
+        .real => try ast.setType(node, typer.predef(.float)),
 
         .let => |let| let: {
-            const any = typer.predef(.any);
-            const unit = typer.predef(.unit);
-            const ident = typer.predef(.ident);
+            const let_type = try ast.setType(node, typer.predef(.unit));
 
-            const let_type = try expect(ast, node, expects, unit);
-            _ = try analyzeExpr(ast, let.name, ident);
-            _ = try analyzeExpr(ast, let.expr, any);
+            try expect(ast, let.name, typer.predef(.ident));
+            _ = try analyzeExpr(ast, let.expr);
 
             break :let let_type;
         },
 
         .program => |prog| prog: {
-            const unit = typer.predef(.unit);
-            const any = typer.predef(.any);
+            const prog_type = try ast.setType(node, typer.predef(.unit));
 
-            const prog_type = try expect(ast, node, expects, unit);
             for (prog) |child| {
-                _ = try analyzeExpr(ast, child, any);
+                _ = try analyzeExpr(ast, child);
             }
 
             break :prog prog_type;
@@ -114,5 +78,5 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node, expects: Type.Id) Error!Type.Id {
 
 /// semantically analyze an expression
 pub fn analyze(ast: *Ast, node: Ast.Node) Error!void {
-    _ = try analyzeExpr(ast, node, typer.predef(.any));
+    _ = try analyzeExpr(ast, node);
 }

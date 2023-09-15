@@ -33,7 +33,6 @@ const TypeHashMap = std.HashMapUnmanaged(
 pub const PredefinedType = enum {
     const Self = @This();
 
-    any,
     unit,
     ident,
     bool,
@@ -42,8 +41,7 @@ pub const PredefinedType = enum {
 
     fn initType(self: Self) Type {
         return switch (self) {
-            inline .any,
-            .unit,
+            inline .unit,
             .ident,
             .bool,
             .int,

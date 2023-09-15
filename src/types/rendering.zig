@@ -10,8 +10,7 @@ const color = blox.Color.init(.normal, .green);
 
 fn renderType(mason: *blox.Mason, t: Type) RenderError!blox.Div {
     return switch (t) {
-        inline .any,
-        .unit,
+        inline .unit,
         .ident,
         .bool,
         .int,

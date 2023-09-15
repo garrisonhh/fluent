@@ -170,9 +170,10 @@ pub fn getLoc(self: *const Ast, node: Node) ?Loc {
     return self.locs.get(node);
 }
 
-pub fn setType(self: *Ast, node: Node, t: Type.Id) Allocator.Error!void {
+pub fn setType(self: *Ast, node: Node, t: Type.Id) Allocator.Error!Type.Id {
     const ally = self.ally;
     try self.types.put(ally, node, t);
+    return t;
 }
 
 pub fn getType(self: *const Ast, node: Node) ?Type.Id {
