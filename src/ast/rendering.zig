@@ -17,27 +17,39 @@ const theme = struct {
     const err = c(.bright, .red);
 };
 
+// errors ======================================================================
+
+fn renderSyntaxError(
+    mason: *blox.Mason,
+    meta: fluent.SyntaxErrorMeta,
+) RenderError!blox.Div {
+    _ = mason;
+    _ = meta;
+
+    @panic("TODO render syntax error");
+}
+
+fn renderSemaError(
+    mason: *blox.Mason,
+    meta: fluent.SemaErrorMeta,
+) RenderError!blox.Div {
+    _ = mason;
+    _ = meta;
+
+    @panic("TODO render sema error");
+}
+
 pub fn renderAstError(
     self: Ast.Error,
     mason: *blox.Mason,
 ) RenderError!blox.Div {
-    var divs = std.BoundedArray(blox.Div, 2){};
-
-    const desc = try mason.newBox(&.{
-        try mason.newPre("[", .{}),
-        try mason.newPre("error", .{ .fg = theme.err }),
-        try mason.newPre("] ", .{}),
-        self.desc,
-    }, .{ .direction = .right });
-
-    divs.appendAssumeCapacity(desc);
-
-    if (self.loc) |loc| {
-        divs.appendAssumeCapacity(try fluent.sources.render(mason, loc));
-    }
-
-    return try mason.newBox(divs.slice(), .{});
+    return switch (self) {
+        .syntax => |meta| try renderSyntaxError(mason, meta),
+        .semantic => |meta| try renderSemaError(mason, meta),
+    };
 }
+
+// ast =========================================================================
 
 fn renderFieldData(
     self: *const Ast,

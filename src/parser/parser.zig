@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const blox = @import("blox");
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
+const Loc = fluent.Loc;
 const Lexer = @import("Lexer.zig");
 const Token = Lexer.Token;
 const literals = @import("literals.zig");
@@ -14,17 +15,88 @@ pub const Error =
     blox.Error ||
     ParseError;
 
-// TODO use blox for errors inline instead of a text desc
-fn invalidSyntax(
-    ast: *Ast,
-    loc: ?fluent.Loc,
-    desc: []const u8,
-) Error {
-    const mason = &ast.error_mason;
+// syntax error helpers ========================================================
 
-    try ast.addError(loc, try mason.newPre(desc, .{}));
+/// represents possible syntax errors
+pub const SyntaxErrorMeta = union(enum) {
+    pub const InvalidLiteral = struct {
+        loc: Loc,
+        tag: Token.Tag,
+    };
+
+    pub const ExpectedOpExpr = struct {
+        loc: Loc,
+        /// slice from source code
+        operator: []const u8,
+    };
+
+    pub const ExpectedToken = struct {
+        loc: Loc,
+        tag: Token.Tag,
+    };
+
+    pub const ExpectedDesc = struct {
+        loc: Loc,
+        desc: []const u8,
+    };
+
+    unexpected_eof: Loc,
+    invalid_literal: InvalidLiteral,
+    expected_op_expr: ExpectedOpExpr,
+    expected_token: ExpectedToken,
+    expected_desc: ExpectedDesc,
+};
+
+fn invalidSyntax(ast: *Ast, meta: SyntaxErrorMeta) Error {
+    try ast.addError(.{ .syntax = meta });
     return ParseError.InvalidSyntax;
 }
+
+fn errorUnexpectedEof(ast: *Ast, lexer: *const Lexer) Error {
+    return invalidSyntax(ast, .{ .unexpected_eof = lexer.nextLoc() });
+}
+
+fn errorExpectedOpExpr(
+    ast: *Ast,
+    lexer: *const Lexer,
+    operator_token: Token,
+) Error {
+    return invalidSyntax(ast, .{
+        .expected_op_expr = .{
+            .loc = operator_token.loc,
+            .operator = lexer.slice(operator_token),
+        },
+    });
+}
+
+fn errorInvalidLiteral(ast: *Ast, token: Token) Error {
+    return invalidSyntax(ast, .{
+        .invalid_literal = .{
+            .tag = token.tag,
+            .loc = token.loc,
+        },
+    });
+}
+
+fn errorExpectedToken(ast: *Ast, lexer: *const Lexer, tag: Token.Tag) Error {
+    return invalidSyntax(ast, .{
+        .expected_token = .{
+            .loc = lexer.nextLoc(),
+            .tag = tag,
+        },
+    });
+}
+
+fn errorExpectedDesc(ast: *Ast, lexer: *const Lexer, desc: []const u8) Error {
+    return invalidSyntax(ast, .{
+        .expected_desc = .{
+            .loc = lexer.nextLoc(),
+            .desc = desc,
+        },
+    });
+}
+
+// parsing =====================================================================
 
 fn parseToken(lexer: *Lexer, tag: Token.Tag) Error!?Token {
     const token = try lexer.peek() orelse {
@@ -37,6 +109,11 @@ fn parseToken(lexer: *Lexer, tag: Token.Tag) Error!?Token {
 
     lexer.accept(token);
     return token;
+}
+
+fn expectToken(ast: *Ast, lexer: *Lexer, tag: Token.Tag) Error!Token {
+    return try parseToken(lexer, tag) orelse
+        errorExpectedToken(ast, lexer, tag);
 }
 
 const ParserFn = fn (*Ast, *Lexer) Error!?Ast.Node;
@@ -78,8 +155,7 @@ fn prefixPrecedenceParser(
                 }
 
                 // an inner expression was expected
-                const desc = "expected expression after unary operator";
-                return invalidSyntax(ast, lexer.nextLoc(), desc);
+                return errorExpectedOpExpr(ast, lexer, ops.getLast());
             };
 
             // create unary stuff
@@ -120,8 +196,7 @@ fn binaryLeftPrecedenceParser(
 
                 // parse rhs
                 const rhs = try inner_parser(ast, lexer) orelse {
-                    const desc = "expected expression after binary operator";
-                    return invalidSyntax(ast, lexer.nextLoc(), desc);
+                    return errorExpectedOpExpr(ast, lexer, pk);
                 };
 
                 // convert to ast node
@@ -163,8 +238,7 @@ fn binaryRightPrecedenceParser(
 
             // parse rhs
             const rhs = try binaryParser(ast, lexer) orelse {
-                const desc = "expected expression after binary operator";
-                return invalidSyntax(ast, lexer.nextLoc(), desc);
+                return errorExpectedOpExpr(ast, lexer, pk);
             };
 
             // convert to ast node
@@ -230,8 +304,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
         .int => int: {
             const text = lexer.slice(pk);
             const int = literals.parseDecimalInt(text) catch {
-                const desc = "invalid integer literal";
-                break :int invalidSyntax(ast, pk.loc, desc);
+                break :int errorInvalidLiteral(ast, pk);
             };
 
             lexer.accept(pk);
@@ -240,8 +313,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
         .real => real: {
             const text = lexer.slice(pk);
             const real = literals.parseDecimalReal(text) catch {
-                const desc = "invalid float literal";
-                break :real invalidSyntax(ast, pk.loc, desc);
+                break :real errorInvalidLiteral(ast, pk);
             };
 
             lexer.accept(pk);
@@ -259,8 +331,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 
             // unit
             const pk2 = try lexer.peek() orelse {
-                const desc = "unexpected end of file";
-                break :parens invalidSyntax(ast, lexer.nextLoc(), desc);
+                break :parens errorUnexpectedEof(ast, lexer);
             };
             if (pk2.tag == .rparen) {
                 lexer.accept(pk2);
@@ -269,13 +340,10 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 
             // wrapped expr
             const inner = try parseExpr(ast, lexer) orelse {
-                const desc = "expected inner expression for parentheses";
-                break :parens invalidSyntax(ast, lexer.nextLoc(), desc);
+                const desc = "inner expression for parentheses";
+                break :parens errorExpectedDesc(ast, lexer, desc);
             };
-            _ = try parseToken(lexer, .rparen) orelse {
-                const desc = "expected `)`";
-                break :parens invalidSyntax(ast, lexer.nextLoc(), desc);
-            };
+            _ = try expectToken(ast, lexer, .rparen);
 
             break :parens try ast.new(pk.loc, .{ .parens = inner });
         },
@@ -354,20 +422,16 @@ const parseDef = binaryPrecedenceParser(
 );
 
 fn parseLet(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
-    const let = try parseToken(lexer, .let) orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected `let`");
-    };
+    const let = try expectToken(ast, lexer, .let);
 
     const name = try parseExpr(ast, lexer) orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected decl name");
+        return errorExpectedDesc(ast, lexer, "identifier for declaration");
     };
 
-    _ = try parseToken(lexer, .equals) orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected `=`");
-    };
+    _ = try expectToken(ast, lexer, .equals);
 
     const expr = try parseExpr(ast, lexer) orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected decl expression");
+        return errorExpectedDesc(ast, lexer, "value for declaration");
     };
 
     return try ast.new(let.loc, .{
@@ -379,29 +443,22 @@ fn parseLet(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
 }
 
 fn parseIf(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
-    const @"if" = try parseToken(lexer, .@"if") orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected `if`");
-    };
+    const @"if" = try expectToken(ast, lexer, .@"if");
 
     const cond = try parseExpr(ast, lexer) orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected if condition");
+        return errorExpectedDesc(ast, lexer, "condition");
     };
 
-    _ = try parseToken(lexer, .then) orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected `then`");
-    };
+    _ = try expectToken(ast, lexer, .then);
 
     const if_true = try parseExpr(ast, lexer) orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected branch when true");
+        return errorExpectedDesc(ast, lexer, "'true' branch of if/then/else");
     };
 
-    _ = try parseToken(lexer, .@"else") orelse {
-        return invalidSyntax(ast, lexer.nextLoc(), "expected `else`");
-    };
+    _ = try expectToken(ast, lexer, .@"else");
 
     const if_false = try parseExpr(ast, lexer) orelse {
-        const desc = "expected branch when false";
-        return invalidSyntax(ast, lexer.nextLoc(), desc);
+        return errorExpectedDesc(ast, lexer, "'false' branch of if/then/else");
     };
 
     return try ast.new(@"if".loc, .{

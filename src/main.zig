@@ -13,10 +13,11 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
 
     const root = fluent.parse(&ast, source, .program) catch |e| switch (e) {
         fluent.ParseError.InvalidSyntax => {
-            const mason = &ast.error_mason;
+            var mason = blox.Mason.init(ally);
+            defer mason.deinit();
 
             for (ast.getErrors()) |err| {
-                const rendered = try err.render(mason);
+                const rendered = try err.render(&mason);
                 try mason.write(rendered, stderr, .{});
             }
 
@@ -30,10 +31,11 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     // analyze
     fluent.analyze(&ast, root) catch |e| switch (e) {
         fluent.SemaError.InvalidType => {
-            const mason = &ast.error_mason;
+            var mason = blox.Mason.init(ally);
+            defer mason.deinit();
 
             for (ast.getErrors()) |err| {
-                const rendered = try err.render(mason);
+                const rendered = try err.render(&mason);
                 try mason.write(rendered, stderr, .{});
             }
 

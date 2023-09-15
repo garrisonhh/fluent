@@ -12,10 +12,12 @@ pub const Loc = sources.Loc;
 const parser = @import("parser/parser.zig");
 pub const ParseError = parser.Error;
 pub const ParseInto = parser.Into;
+pub const SyntaxErrorMeta = parser.SyntaxErrorMeta;
 pub const parse = parser.parse;
 
 const sema = @import("sema/sema.zig");
 pub const SemaError = sema.Error;
+pub const SemaErrorMeta = sema.SemaErrorMeta;
 pub const analyze = sema.analyze;
 
 // pipes =======================================================================

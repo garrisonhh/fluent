@@ -13,35 +13,58 @@ pub const Error =
     typer.RenderError ||
     SemaError;
 
+/// represents possible sema errors
+pub const SemaErrorMeta = union(enum) {
+    const Expected = struct {
+        loc: Loc,
+        expected: Type.Id,
+        found: Type.Id,
+    };
+
+    expected: Expected,
+};
+
 /// generate an ast error and return error.InvalidType
-fn invalidType(ast: *Ast, loc: ?Loc, desc: blox.Div) Error {
-    try ast.addError(loc, desc);
+fn invalidType(ast: *Ast, meta: SemaErrorMeta) Error {
+    try ast.addError(.{ .semantic = meta });
     return Error.InvalidType;
-}
-
-fn errorExpected(
-    ast: *Ast,
-    loc: ?Loc,
-    expected: Type.Id,
-    found: Type.Id,
-) Error {
-    const mason = &ast.error_mason;
-    const desc = try mason.newBox(&.{
-        try mason.newPre("expected ", .{}),
-        try typer.render(mason, expected),
-        try mason.newPre(", found ", .{}),
-        try typer.render(mason, found),
-    }, .{ .direction = .right });
-
-    return invalidType(ast, loc, desc);
 }
 
 /// analyze a node and expect the type of this node to match the expected type
 fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
     const actual = try analyzeExpr(ast, node);
     if (!actual.eql(expected)) {
-        return errorExpected(ast, ast.getLoc(node), expected, actual);
+        return invalidType(ast, .{
+            .expected = .{
+                .loc = ast.getLoc(node),
+                .expected = expected,
+                .found = actual,
+            },
+        });
     }
+}
+
+fn analyzeUnary(
+    ast: *Ast,
+    node: Ast.Node,
+    meta: Ast.Expr.Unary,
+) Error!Type.Id {
+    _ = ast;
+    _ = node;
+    _ = meta;
+    @panic("TODO analyze unary op");
+}
+
+
+fn analyzeBinary(
+    ast: *Ast,
+    node: Ast.Node,
+    meta: Ast.Expr.Binary,
+) Error!Type.Id {
+    _ = ast;
+    _ = node;
+    _ = meta;
+    @panic("TODO analyze binary op");
 }
 
 /// dispatch for analysis
@@ -52,6 +75,9 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
         .bool => try ast.setType(node, typer.predef(.bool)),
         .int => try ast.setType(node, typer.predef(.int)),
         .real => try ast.setType(node, typer.predef(.float)),
+
+        .unary => |meta| try analyzeUnary(ast, node, meta),
+        .binary => |meta| try analyzeBinary(ast, node, meta),
 
         .let => |let| let: {
             const let_type = try ast.setType(node, typer.predef(.unit));
@@ -72,7 +98,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
             break :prog prog_type;
         },
 
-        else => |tag| std.debug.panic("TODO analyze {}", .{tag}),
+        else => |expr| std.debug.panic("TODO analyze {s}", .{@tagName(expr)}),
     };
 }
 

@@ -85,7 +85,7 @@ pub fn init(source: fluent.Source) Lexer {
 }
 
 /// what the lexer is looking at
-pub fn nextLoc(self: *Lexer) Loc {
+pub fn nextLoc(self: Lexer) Loc {
     if (self.cache.len > 0) {
         return self.cache.get(0).loc;
     }
