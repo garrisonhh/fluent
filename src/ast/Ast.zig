@@ -21,7 +21,6 @@ pub const UnaryOp = enum {
 };
 
 pub const BinaryOp = enum {
-    def,
     statement,
     field_access,
 

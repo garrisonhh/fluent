@@ -15,13 +15,29 @@ pub const Error =
 
 /// represents possible sema errors
 pub const SemaErrorMeta = union(enum) {
+    const Self = @This();
+
     const Expected = struct {
         loc: Loc,
         expected: Type.Id,
         found: Type.Id,
     };
 
+    const ExpectedOneOf = struct {
+        loc: Loc,
+        expected: []const Type.Id,
+        found: Type.Id,
+    };
+
     expected: Expected,
+    expected_one_of: ExpectedOneOf,
+
+    pub fn deinit(self: Self, ally: Allocator) void {
+        switch (self) {
+            .expected_one_of => |exp| ally.free(exp.expected),
+            else => {},
+        }
+    }
 };
 
 /// generate an ast error and return error.InvalidType
@@ -44,9 +60,31 @@ fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
     }
 }
 
+/// expect with multiple options
+fn expectOneOf(
+    ast: *Ast,
+    node: Ast.Node,
+    expected: []const Type.Id,
+) Error!Type.Id {
+    const actual = try analyzeExpr(ast, node);
+    for (expected) |t| {
+        if (actual.eql(t)) {
+            return actual;
+        }
+    } else {
+        return invalidType(ast, .{
+            .expected_one_of = .{
+                .loc = ast.getLoc(node),
+                .expected = try ast.ally.dupe(Type.Id, expected),
+                .found = actual,
+            },
+        });
+    }
+}
+
 /// analyze a quoted node and expect it to match the expected type
 fn expectQuoted(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
-    const actual = try analyzeQuotedExpr(ast, node);
+    const actual = try analyzeQuoted(ast, node);
     if (!actual.eql(expected)) {
         return invalidType(ast, .{
             .expected = .{
@@ -74,13 +112,33 @@ fn analyzeBinary(
     node: Ast.Node,
     meta: Ast.Expr.Binary,
 ) Error!Type.Id {
-    _ = ast;
-    _ = node;
-    _ = meta;
-    @panic("TODO analyze binary op");
+    return switch (meta.op) {
+        // arithmetic
+        .add,
+        .subtract,
+        .multiply,
+        .divide,
+        .modulus,
+        => arith: {
+            const lhs_type = try expectOneOf(ast, meta.lhs, &.{
+                typer.predef(.int),
+                typer.predef(.float),
+            });
+
+            // TODO error info should convey that it needs to match lhs type
+            _ = try expect(ast, meta.rhs, lhs_type);
+
+            break :arith try ast.setType(node, lhs_type);
+        },
+
+        else => |op| std.debug.panic(
+            "TODO analyze binary {s}",
+            .{@tagName(op)},
+        ),
+    };
 }
 
-fn analyzeQuotedExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
+fn analyzeQuoted(ast: *Ast, node: Ast.Node) Error!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.predef(.unit)),
         .bool => try ast.setType(node, typer.predef(.bool)),

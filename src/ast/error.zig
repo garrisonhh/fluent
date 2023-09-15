@@ -15,8 +15,9 @@ pub const Error = union(enum) {
     semantic: fluent.SemaErrorMeta,
 
     pub fn deinit(self: Error, ally: Allocator) void {
-        _ = self;
-        _ = ally;
+        switch (self) {
+            inline else => |x| x.deinit(ally),
+        }
     }
 
     pub const render = rendering.renderAstError;

@@ -19,6 +19,8 @@ pub const Error =
 
 /// represents possible syntax errors
 pub const SyntaxErrorMeta = union(enum) {
+    const Self = @This();
+
     pub const InvalidLiteral = struct {
         loc: Loc,
         tag: Token.Tag,
@@ -45,6 +47,11 @@ pub const SyntaxErrorMeta = union(enum) {
     expected_op_expr: ExpectedOpExpr,
     expected_token: ExpectedToken,
     expected_desc: ExpectedDesc,
+
+    pub fn deinit(self: Self, ally: Allocator) void {
+        _ = self;
+        _ = ally;
+    }
 };
 
 fn invalidSyntax(ast: *Ast, meta: SyntaxErrorMeta) Error {
