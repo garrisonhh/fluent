@@ -1,9 +1,10 @@
 const std = @import("std");
 const stderr = std.io.getStdErr().writer();
 const Allocator = std.mem.Allocator;
+const blox = @import("blox");
 const fluent = @import("mod.zig");
 const Ast = fluent.Ast;
-const blox = @import("blox");
+const typer = fluent.typer;
 
 const TestFailure = error.TestFailure;
 
@@ -20,18 +21,20 @@ fn expectExpr(ast: *Ast, expected: Ast.Node, text: []const u8) !void {
     };
     try fluent.analyze(ast, node);
 
-    // structural equality
-    if (ast.eql(expected, node)) return;
+    // equality check
+    const types_match = if (ast.getType(expected)) |expected_type| t: {
+        const actual_type = ast.getType(node) orelse {
+            break :t false;
+        };
 
-    // type equality
-    if (ast.getType(expected)) |expected_type| {
-        if (ast.getType(node)) |actual_type| {
-            if (actual_type.eql(expected_type)) return;
-        }
-    } else {
-        // actual node should be untyped
-        if (ast.getType(node) == null) return;
-    }
+        break :t actual_type.eql(expected_type);
+    } else exp_untyped: {
+        break :exp_untyped ast.getType(node) == null;
+    };
+
+    const structures_match = ast.eql(expected, node);
+
+    if (types_match and structures_match) return;
 
     // nodes aren't equal :(
     var bw = std.io.bufferedWriter(stderr);
@@ -70,6 +73,8 @@ fn testIdent(ident: []const u8) !void {
     const expr = try ast.new(null, .{
         .ident = try ally.dupe(u8, ident),
     });
+    try ast.setType(expr, typer.predef(.ident));
+
     try expectExpr(&ast, expr, ident);
 }
 
@@ -81,6 +86,7 @@ fn testInt(int: Ast.Expr.Int) !void {
     defer ast.deinit();
 
     const expr = try ast.new(null, .{ .int = int });
+    try ast.setType(expr, typer.predef(.int));
 
     const text = try std.fmt.allocPrint(ally, "{d}", .{int});
     defer ally.free(text);
@@ -96,6 +102,7 @@ fn testReal(real: Ast.Expr.Real) !void {
     defer ast.deinit();
 
     const expr = try ast.new(null, .{ .real = real });
+    try ast.setType(expr, typer.predef(.float));
 
     const text = try std.fmt.allocPrint(ally, "{d:.16}", .{real});
     defer ally.free(text);
@@ -113,6 +120,8 @@ test "parse-unit" {
     defer ast.deinit();
 
     const unit = try ast.new(null, .unit);
+    try ast.setType(unit, typer.predef(.unit));
+
     try expectExpr(&ast, unit, "()");
 }
 
