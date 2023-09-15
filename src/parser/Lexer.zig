@@ -132,7 +132,7 @@ fn isIdentStart(c: Codepoint) bool {
 }
 
 fn isIdentTail(c: Codepoint) bool {
-    return c.isAlpha() or c.c == '-' or c.isDigit(10);
+    return c.isAlpha() or c.c == '_' or c.isDigit(10);
 }
 
 fn isDecimal(c: Codepoint) bool {

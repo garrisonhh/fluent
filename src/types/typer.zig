@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
 const com = @import("common");
 const rendering = @import("rendering.zig");
 const Type = @import("type.zig").Type;
@@ -72,6 +73,13 @@ pub fn deinit(ally: Allocator) void {
     var iter = map.iterator();
     while (iter.next()) |t| t.deinit(ally);
     map.deinit(ally);
+
+    // reset for tests
+    if (builtin.is_test) {
+        map = .{};
+        types = .{};
+        predef_cache = .{};
+    }
 }
 
 /// retrieve a predefined type's id

@@ -66,11 +66,11 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\let chk-unit = ()
-        \\let chk-true = true
-        \\let chk-false = false
-        \\let chk-int = 123
-        \\let chk-real = 123.123
+        \\let chk_unit = ()
+        \\let chk_true = true
+        \\let chk_false = false
+        \\let chk_int = 123
+        \\let chk_real = 123.123
     ;
     const source = try fluent.sources.add(ally, "test", text);
 
