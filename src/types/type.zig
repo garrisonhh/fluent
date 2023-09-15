@@ -10,6 +10,7 @@ pub const Type = union(enum) {
 
     any,
     unit,
+    ident,
     bool,
     // TODO bits
     int,
@@ -21,6 +22,7 @@ pub const Type = union(enum) {
         switch (self) {
             .any,
             .unit,
+            .ident,
             .bool,
             .int,
             .float,

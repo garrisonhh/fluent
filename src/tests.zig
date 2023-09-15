@@ -11,12 +11,27 @@ const ally = std.testing.allocator;
 
 // helpers =====================================================================
 
+/// expects the parsed and analyzed text to match the expected node
 fn expectExpr(ast: *Ast, expected: Ast.Node, text: []const u8) !void {
     const source = try fluent.sources.add(ally, "test", text);
+
     const node = try fluent.parse(ast, source, .expr) orelse {
         return TestFailure;
     };
+    try fluent.analyze(ast, node);
+
+    // structural equality
     if (ast.eql(expected, node)) return;
+
+    // type equality
+    if (ast.getType(expected)) |expected_type| {
+        if (ast.getType(node)) |actual_type| {
+            if (actual_type.eql(expected_type)) return;
+        }
+    } else {
+        // actual node should be untyped
+        if (ast.getType(node) == null) return;
+    }
 
     // nodes aren't equal :(
     var bw = std.io.bufferedWriter(stderr);

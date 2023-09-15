@@ -12,6 +12,7 @@ fn renderType(mason: *blox.Mason, t: Type) RenderError!blox.Div {
     return switch (t) {
         inline .any,
         .unit,
+        .ident,
         .bool,
         .int,
         .float,

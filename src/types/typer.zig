@@ -35,6 +35,7 @@ pub const PredefinedType = enum {
 
     any,
     unit,
+    ident,
     bool,
     int,
     float,
@@ -43,6 +44,7 @@ pub const PredefinedType = enum {
         return switch (self) {
             inline .any,
             .unit,
+            .ident,
             .bool,
             .int,
             .float,

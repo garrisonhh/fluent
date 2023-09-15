@@ -49,6 +49,7 @@ fn resolve(
 
         // exact match expected
         .unit,
+        .ident,
         .bool,
         .int,
         .float,
@@ -78,41 +79,33 @@ fn expect(
 fn analyzeExpr(ast: *Ast, node: Ast.Node, expects: Type.Id) Error!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try expect(ast, node, expects, typer.predef(.unit)),
+        .ident => try expect(ast, node, expects, typer.predef(.ident)),
         .bool => try expect(ast, node, expects, typer.predef(.bool)),
         .int => try expect(ast, node, expects, typer.predef(.int)),
         .real => try expect(ast, node, expects, typer.predef(.float)),
 
         .let => |let| let: {
-            const unit = typer.predef(.unit);
             const any = typer.predef(.any);
+            const unit = typer.predef(.unit);
+            const ident = typer.predef(.ident);
 
-            // let is unit
-            const let_res = try resolve(ast, ast.getLoc(node), expects, unit);
-            try ast.setType(node, let_res);
-
-            // TODO analyze let.name as quoted ident
-
-            // recurse on expr
-            // TODO add type annotation to let expr
+            const let_type = try expect(ast, node, expects, unit);
+            _ = try analyzeExpr(ast, let.name, ident);
             _ = try analyzeExpr(ast, let.expr, any);
 
-            break :let let_res;
+            break :let let_type;
         },
 
         .program => |prog| prog: {
             const unit = typer.predef(.unit);
             const any = typer.predef(.any);
 
-            // prog is unit
-            const prog_res = try resolve(ast, ast.getLoc(node), expects, unit);
-            try ast.setType(node, prog_res);
-
-            // children are any
+            const prog_type = try expect(ast, node, expects, unit);
             for (prog) |child| {
                 _ = try analyzeExpr(ast, child, any);
             }
 
-            break :prog prog_res;
+            break :prog prog_type;
         },
 
         else => |tag| std.debug.panic("TODO analyze {}", .{tag}),
