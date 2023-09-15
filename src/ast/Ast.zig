@@ -182,7 +182,9 @@ pub fn getType(self: *const Ast, node: Node) ?Type.Id {
 fn exprDataEql(self: *const Ast, a: anytype, b: @TypeOf(a)) bool {
     return switch (@TypeOf(a, b)) {
         void => true,
-        Expr.Int, Expr.Real => a == b,
+
+        bool, Expr.Int, Expr.Real => a == b,
+
         []const u8 => std.mem.eql(u8, a, b),
         Node => self.eql(a, b),
 

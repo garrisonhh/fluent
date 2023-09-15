@@ -125,6 +125,23 @@ test "parse-unit" {
     try expectExpr(&ast, unit, "()");
 }
 
+test "parse-bools" {
+    try fluent.init(ally);
+    defer fluent.deinit(ally);
+
+    var ast = Ast.init(ally);
+    defer ast.deinit();
+
+    const true_expr = try ast.new(null, .{ .bool = true });
+    const false_expr = try ast.new(null, .{ .bool = false });
+
+    try ast.setType(true_expr, typer.predef(.bool));
+    try ast.setType(false_expr, typer.predef(.bool));
+
+    try expectExpr(&ast, true_expr, "true");
+    try expectExpr(&ast, false_expr, "false");
+}
+
 test "parse-identifiers" {
     try testIdent("hello");
     try testIdent("CamelCase");
