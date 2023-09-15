@@ -29,8 +29,16 @@ pub const SemaErrorMeta = union(enum) {
         found: Type.Id,
     };
 
+    const ExpectedMatching = struct {
+        expected: Type.Id,
+        found: Type.Id,
+        expected_loc: Loc,
+        found_loc: Loc,
+    };
+
     expected: Expected,
     expected_one_of: ExpectedOneOf,
+    expected_matching: ExpectedMatching,
 
     pub fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
@@ -82,6 +90,23 @@ fn expectOneOf(
     }
 }
 
+fn expectMatching(ast: *Ast, node: Ast.Node, to_match: Ast.Node) Error!Type.Id {
+    const actual = try analyzeExpr(ast, node);
+    const expected = ast.getType(to_match).?;
+    if (!actual.eql(expected)) {
+        return invalidType(ast, .{
+            .expected_matching = .{
+                .expected = expected,
+                .found = actual,
+                .expected_loc = ast.getLoc(to_match),
+                .found_loc = ast.getLoc(node),
+            },
+        });
+    }
+
+    return actual;
+}
+
 /// analyze a quoted node and expect it to match the expected type
 fn expectQuoted(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
     const actual = try analyzeQuoted(ast, node);
@@ -125,8 +150,7 @@ fn analyzeBinary(
                 typer.predef(.float),
             });
 
-            // TODO error info should convey that it needs to match lhs type
-            _ = try expect(ast, meta.rhs, lhs_type);
+            _ = try expectMatching(ast, meta.rhs, meta.lhs);
 
             break :arith try ast.setType(node, lhs_type);
         },

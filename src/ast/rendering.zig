@@ -154,6 +154,18 @@ fn renderSemaError(
                 try exp.loc.render(mason),
             }, .{});
         },
+
+        .expected_matching => |exp| try mason.newBox(&.{
+            try errorDesc(mason, .type, try mason.newBox(&.{
+                try mason.newPre("expected ", .{}),
+                try typer.render(mason, exp.expected),
+                try mason.newPre(", found ", .{}),
+                try typer.render(mason, exp.found),
+            }, span)),
+            try exp.found_loc.render(mason),
+            try mason.newPre("this would match the expression here", .{}),
+            try exp.expected_loc.render(mason),
+        }, .{}),
     };
 }
 

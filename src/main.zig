@@ -74,7 +74,7 @@ pub fn main() !void {
         \\let chk_int = 123
         \\let chk_real = 123.123
         \\
-        \\let a = 3. * 4. + 5.
+        \\let a = 3 * 4. + 5.
     ;
     const source = try fluent.sources.add(ally, "test", text);
 
