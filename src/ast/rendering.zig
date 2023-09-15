@@ -3,10 +3,13 @@ const builtin = @import("builtin");
 const blox = @import("blox");
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
+const Loc = fluent.Loc;
 const Type = fluent.Type;
 const typer = fluent.typer;
 
 pub const RenderError = blox.Error || std.fmt.AllocPrintError;
+
+const span = blox.BoxOptions{ .direction = .right };
 
 const theme = struct {
     const c = blox.Color.init;
@@ -19,24 +22,112 @@ const theme = struct {
 
 // errors ======================================================================
 
+const ErrorScope = enum {
+    syntax,
+    type,
+};
+
+/// adds tag to error description
+fn errorDesc(
+    mason: *blox.Mason,
+    scope: ErrorScope,
+    desc: blox.Div,
+) RenderError!blox.Div {
+    const ally = mason.ally;
+
+    const err_name = try std.fmt.allocPrint(ally, "{s} error", .{
+        @tagName(scope),
+    });
+    defer ally.free(err_name);
+
+    return try mason.newBox(&.{
+        try mason.newPre("[", .{}),
+        try mason.newPre(err_name, .{ .fg = theme.err }),
+        try mason.newPre("] ", .{}),
+        desc,
+    }, span);
+}
+
+/// an error with a description and a location
+fn simpleError(
+    mason: *blox.Mason,
+    scope: ErrorScope,
+    loc: Loc,
+    comptime fmt: []const u8,
+    args: anytype,
+) RenderError!blox.Div {
+    const ally = mason.ally;
+    const text = try std.fmt.allocPrint(ally, fmt, args);
+    defer ally.free(text);
+
+    return try mason.newBox(&.{
+        try errorDesc(mason, scope, try mason.newPre(text, .{})),
+        try loc.render(mason),
+    }, .{});
+}
+
 fn renderSyntaxError(
     mason: *blox.Mason,
     meta: fluent.SyntaxErrorMeta,
 ) RenderError!blox.Div {
-    _ = mason;
-    _ = meta;
+    return switch (meta) {
+        .unexpected_eof => |loc| try simpleError(
+            mason,
+            .syntax,
+            loc,
+            "unexpected EOF",
+            .{},
+        ),
 
-    @panic("TODO render syntax error");
+        .invalid_literal => |il| try simpleError(
+            mason,
+            .syntax,
+            il.loc,
+            "invalid {s} literal",
+            .{@tagName(il.tag)},
+        ),
+
+        .expected_op_expr => |exp| try simpleError(
+            mason,
+            .syntax,
+            exp.loc,
+            "expected expression for operator `{s}`",
+            .{exp.operator},
+        ),
+
+        .expected_token => |exp| try simpleError(
+            mason,
+            .syntax,
+            exp.loc,
+            "expected {s}",
+            .{@tagName(exp.tag)},
+        ),
+
+        .expected_desc => |exp| try simpleError(
+            mason,
+            .syntax,
+            exp.loc,
+            "expected {s}",
+            .{exp.desc},
+        ),
+    };
 }
 
 fn renderSemaError(
     mason: *blox.Mason,
     meta: fluent.SemaErrorMeta,
 ) RenderError!blox.Div {
-    _ = mason;
-    _ = meta;
-
-    @panic("TODO render sema error");
+    return switch (meta) {
+        .expected => |exp| try mason.newBox(&.{
+            try errorDesc(mason, .type, try mason.newBox(&.{
+                try mason.newPre("expected ", .{}),
+                try typer.render(mason, exp.expected),
+                try mason.newPre(", found ", .{}),
+                try typer.render(mason, exp.found),
+            }, span)),
+            try exp.loc.render(mason),
+        }, .{}),
+    };
 }
 
 pub fn renderAstError(
@@ -90,7 +181,6 @@ pub fn render(
     mason: *blox.Mason,
     node: Ast.Node,
 ) RenderError!blox.Div {
-    const span = blox.BoxOptions{ .direction = .right };
     const indent = try mason.newSpacer(2, 0, .{});
     const space = try mason.newSpacer(1, 0, .{});
 

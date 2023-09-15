@@ -30,9 +30,23 @@ fn invalidType(ast: *Ast, meta: SemaErrorMeta) Error {
     return Error.InvalidType;
 }
 
-/// analyze a node and expect the type of this node to match the expected type
+/// analyze a node and expect it to match the expected type
 fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
     const actual = try analyzeExpr(ast, node);
+    if (!actual.eql(expected)) {
+        return invalidType(ast, .{
+            .expected = .{
+                .loc = ast.getLoc(node),
+                .expected = expected,
+                .found = actual,
+            },
+        });
+    }
+}
+
+/// analyze a quoted node and expect it to match the expected type
+fn expectQuoted(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
+    const actual = try analyzeQuotedExpr(ast, node);
     if (!actual.eql(expected)) {
         return invalidType(ast, .{
             .expected = .{
@@ -55,7 +69,6 @@ fn analyzeUnary(
     @panic("TODO analyze unary op");
 }
 
-
 fn analyzeBinary(
     ast: *Ast,
     node: Ast.Node,
@@ -67,11 +80,25 @@ fn analyzeBinary(
     @panic("TODO analyze binary op");
 }
 
+fn analyzeQuotedExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
+    return switch (ast.get(node).*) {
+        .unit => try ast.setType(node, typer.predef(.unit)),
+        .bool => try ast.setType(node, typer.predef(.bool)),
+        .ident => try ast.setType(node, typer.predef(.ident)),
+        .int => try ast.setType(node, typer.predef(.int)),
+        .real => try ast.setType(node, typer.predef(.float)),
+
+        else => |expr| std.debug.panic(
+            "TODO analyze quoted {s}",
+            .{@tagName(expr)},
+        ),
+    };
+}
+
 /// dispatch for analysis
 fn analyzeExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.predef(.unit)),
-        .ident => try ast.setType(node, typer.predef(.ident)),
         .bool => try ast.setType(node, typer.predef(.bool)),
         .int => try ast.setType(node, typer.predef(.int)),
         .real => try ast.setType(node, typer.predef(.float)),
@@ -82,7 +109,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
         .let => |let| let: {
             const let_type = try ast.setType(node, typer.predef(.unit));
 
-            try expect(ast, let.name, typer.predef(.ident));
+            try expectQuoted(ast, let.name, typer.predef(.ident));
             _ = try analyzeExpr(ast, let.expr);
 
             break :let let_type;

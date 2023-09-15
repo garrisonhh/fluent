@@ -68,7 +68,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\let chk_unit = ()
+        \\let unit = ()
         \\let chk_true = true
         \\let chk_false = false
         \\let chk_int = 123

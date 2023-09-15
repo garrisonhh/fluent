@@ -425,13 +425,13 @@ fn parseLet(ast: *Ast, lexer: *Lexer) Error!?Ast.Node {
     const let = try expectToken(ast, lexer, .let);
 
     const name = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "identifier for declaration");
+        return errorExpectedDesc(ast, lexer, "identifier for let expression");
     };
 
     _ = try expectToken(ast, lexer, .equals);
 
     const expr = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "value for declaration");
+        return errorExpectedDesc(ast, lexer, "value for let expression");
     };
 
     return try ast.new(let.loc, .{

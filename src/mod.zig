@@ -125,7 +125,7 @@ pub const std_options = struct {
         const is_single_line = std.mem.count(u8, slice, "\n") == 0;
         if (is_single_line) {
             const deco_fmt = mason.fmt(tag, .{ .print_final_newline = false });
-            try stderr.print("{}{s}\n", .{deco_fmt, slice});
+            try stderr.print("{}{s}\n", .{ deco_fmt, slice });
         } else {
             // multiline
             const indent = try mason.newPre("| ", .{
@@ -141,7 +141,7 @@ pub const std_options = struct {
                     .print_final_newline = false,
                 });
 
-                try stderr.print("{}{s}\n", .{deco_fmt, line});
+                try stderr.print("{}{s}\n", .{ deco_fmt, line });
             }
 
             try stderr.writeByte('\n');

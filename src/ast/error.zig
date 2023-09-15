@@ -9,6 +9,7 @@ const Loc = fluent.Loc;
 /// error metadata for rendering
 pub const Error = union(enum) {
     const Self = @This();
+    pub const Tag = std.meta.Tag(Self);
 
     syntax: fluent.SyntaxErrorMeta,
     semantic: fluent.SemaErrorMeta,
@@ -20,4 +21,3 @@ pub const Error = union(enum) {
 
     pub const render = rendering.renderAstError;
 };
-
