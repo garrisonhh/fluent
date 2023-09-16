@@ -11,8 +11,9 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var ast = fluent.Ast.init(ally);
     defer ast.deinit();
 
-    const root = fluent.parse(&ast, source, .program) catch |e| switch (e) {
-        fluent.ParseError.InvalidSyntax => {
+    const root = switch (try fluent.parse(&ast, source, .program)) {
+        .ok => |node| node,
+        .fail => {
             var mason = blox.Mason.init(ally);
             defer mason.deinit();
 
@@ -22,15 +23,13 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
             }
 
             return;
-        },
-        else => {
-            return e;
         },
     };
 
     // analyze
-    fluent.analyze(&ast, root) catch |e| switch (e) {
-        fluent.SemaError.InvalidType => {
+    switch (try fluent.analyze(&ast, root)) {
+        .ok => {},
+        .fail => {
             var mason = blox.Mason.init(ally);
             defer mason.deinit();
 
@@ -41,10 +40,7 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
 
             return;
         },
-        else => {
-            return e;
-        },
-    };
+    }
 
     // render
     var mason = blox.Mason.init(ally);

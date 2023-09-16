@@ -7,11 +7,12 @@ const Loc = fluent.Loc;
 const Type = fluent.Type;
 const typer = fluent.typer;
 
-pub const SemaError = error{InvalidType};
 pub const Error =
     Allocator.Error ||
-    typer.RenderError ||
-    SemaError;
+    typer.RenderError;
+
+const InvalidTypeError = error{InvalidType};
+const SemaError = Error || InvalidTypeError;
 
 /// represents possible sema errors
 pub const SemaErrorMeta = union(enum) {
@@ -49,13 +50,13 @@ pub const SemaErrorMeta = union(enum) {
 };
 
 /// generate an ast error and return error.InvalidType
-fn invalidType(ast: *Ast, meta: SemaErrorMeta) Error {
+fn invalidType(ast: *Ast, meta: SemaErrorMeta) SemaError {
     try ast.addError(.{ .semantic = meta });
-    return Error.InvalidType;
+    return SemaError.InvalidType;
 }
 
 /// analyze a node and expect it to match the expected type
-fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
+fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!void {
     const actual = try analyzeExpr(ast, node);
     if (!actual.eql(expected)) {
         return invalidType(ast, .{
@@ -73,7 +74,7 @@ fn expectOneOf(
     ast: *Ast,
     node: Ast.Node,
     expected: []const Type.Id,
-) Error!Type.Id {
+) SemaError!Type.Id {
     const actual = try analyzeExpr(ast, node);
     for (expected) |t| {
         if (actual.eql(t)) {
@@ -90,7 +91,11 @@ fn expectOneOf(
     }
 }
 
-fn expectMatching(ast: *Ast, node: Ast.Node, to_match: Ast.Node) Error!Type.Id {
+fn expectMatching(
+    ast: *Ast,
+    node: Ast.Node,
+    to_match: Ast.Node,
+) SemaError!Type.Id {
     const actual = try analyzeExpr(ast, node);
     const expected = ast.getType(to_match).?;
     if (!actual.eql(expected)) {
@@ -108,7 +113,11 @@ fn expectMatching(ast: *Ast, node: Ast.Node, to_match: Ast.Node) Error!Type.Id {
 }
 
 /// analyze a quoted node and expect it to match the expected type
-fn expectQuoted(ast: *Ast, node: Ast.Node, expected: Type.Id) Error!void {
+fn expectQuoted(
+    ast: *Ast,
+    node: Ast.Node,
+    expected: Type.Id,
+) SemaError!void {
     const actual = try analyzeQuoted(ast, node);
     if (!actual.eql(expected)) {
         return invalidType(ast, .{
@@ -125,7 +134,7 @@ fn analyzeUnary(
     ast: *Ast,
     node: Ast.Node,
     meta: Ast.Expr.Unary,
-) Error!Type.Id {
+) SemaError!Type.Id {
     _ = ast;
     _ = node;
     _ = meta;
@@ -136,7 +145,7 @@ fn analyzeBinary(
     ast: *Ast,
     node: Ast.Node,
     meta: Ast.Expr.Binary,
-) Error!Type.Id {
+) SemaError!Type.Id {
     return switch (meta.op) {
         // arithmetic
         .add,
@@ -162,7 +171,7 @@ fn analyzeBinary(
     };
 }
 
-fn analyzeQuoted(ast: *Ast, node: Ast.Node) Error!Type.Id {
+fn analyzeQuoted(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.predef(.unit)),
         .bool => try ast.setType(node, typer.predef(.bool)),
@@ -178,7 +187,7 @@ fn analyzeQuoted(ast: *Ast, node: Ast.Node) Error!Type.Id {
 }
 
 /// dispatch for analysis
-fn analyzeExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
+fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.predef(.unit)),
         .bool => try ast.setType(node, typer.predef(.bool)),
@@ -211,7 +220,16 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) Error!Type.Id {
     };
 }
 
+pub const Result = enum { ok, fail };
+
 /// semantically analyze an expression
-pub fn analyze(ast: *Ast, node: Ast.Node) Error!void {
-    _ = try analyzeExpr(ast, node);
+pub fn analyze(ast: *Ast, node: Ast.Node) Error!Result {
+    return if (analyzeExpr(ast, node)) |_| .ok else |e| switch (e) {
+        InvalidTypeError.InvalidType => {
+            return .fail;
+        },
+        else => |filtered| {
+            return @as(Error, @errSetCast(filtered));
+        },
+    };
 }

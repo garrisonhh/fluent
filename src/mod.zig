@@ -10,9 +10,9 @@ pub const Source = sources.Source;
 pub const Loc = sources.Loc;
 
 const parser = @import("parser/parser.zig");
+pub const SyntaxErrorMeta = parser.SyntaxErrorMeta;
 pub const ParseError = parser.Error;
 pub const ParseInto = parser.Into;
-pub const SyntaxErrorMeta = parser.SyntaxErrorMeta;
 pub const parse = parser.parse;
 
 const sema = @import("sema/sema.zig");
