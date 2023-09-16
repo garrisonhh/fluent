@@ -1,5 +1,5 @@
 .{
-    .name = "fluent-parser",
+    .name = "fluent",
     .version = "0.0.0",
     .dependencies = .{
         .zighh = .{

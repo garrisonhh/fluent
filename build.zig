@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
 
     // exe
     const exe = b.addExecutable(.{
-        .name = "fluent-parser",
+        .name = "fluent",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
@@ -51,6 +51,6 @@ pub fn build(b: *std.Build) void {
 
     const test_cmd = b.addRunArtifact(tests);
 
-    const test_step = b.step("test", "Run unit tests");
+    const test_step = b.step("test", "run unit tests");
     test_step.dependOn(&test_cmd.step);
 }
