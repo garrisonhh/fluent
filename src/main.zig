@@ -51,7 +51,7 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     defer ssa_prog.deinit(ally);
 
     // render ssa
-    const ssa_div = try ast.render(&mason, root);
+    const ssa_div = try ssa_prog.render(&mason);
 
     try writer.print("[ssa]\n", .{});
     try mason.write(ssa_div, writer, .{});
@@ -69,8 +69,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\let main = fn () ->
-        \\  3. * 4. * 5.
+        \\let a = fn () -> 3 * 4 + 5
     ;
     const source = try fluent.sources.add(ally, "test", text);
 

@@ -14,12 +14,22 @@ pub const Constant = union(enum) {
     pub const Ref = com.Ref(.ssa_constant, 32);
     pub const RefList = com.RefList(Ref, Self);
 
+    unit,
     bool: bool,
     uint: u64,
     float: f64,
 };
 
 pub const Opcode = union(enum) {
+    pub const Branch = struct {
+        cond: Local,
+        if_true: Block.Ref,
+        if_false: Block.Ref,
+    };
+
+    constant: Constant.Ref,
+    branch: Branch,
+
     add: [2]Local,
     sub: [2]Local,
     mul: [2]Local,
@@ -33,34 +43,17 @@ pub const Op = struct {
     code: Opcode,
 };
 
-/// instructions that determine control flow between blocks
-pub const Branch = union(enum) {
-    pub const Return = struct {
-        value: Local,
-    };
-
-    pub const Jump = struct {
-        value: Local,
-        dest: Block.Ref,
-    };
-
-    /// return from the function
-    @"return": Return,
-    /// unconditional jump to another block
-    jump: Jump,
-};
-
 pub const Block = struct {
     const Self = @This();
     pub const Ref = com.Ref(.ssa_block, 32);
     pub const RefList = com.RefList(Ref, Self);
 
-    /// the local this block receives branch values into
+    /// the local this block receives branch values into (null for entry blocks)
     phi: ?Local,
     /// instructions for block
     ops: []const Op,
-    /// where this block goes after executing
-    branch: Branch,
+    /// what this block returns
+    ret: Local,
 
     fn deinit(b: Block, ally: Allocator) void {
         ally.free(b.ops);
@@ -74,6 +67,7 @@ pub const Func = struct {
 
     params: []const Local,
     returns: Type.Id,
+    entry: Block.Ref,
     locals: LocalList,
     blocks: Block.RefList,
 
@@ -111,15 +105,15 @@ pub const BlockBuilder = struct {
     ally: Allocator,
     func: *FuncBuilder,
     ref: Block.Ref,
-    phi: Local,
+    phi: ?Local,
     ops: std.ArrayListUnmanaged(Op) = .{},
 
     /// finalize this block
-    pub fn build(self: *Self, branch: Branch) Allocator.Error!void {
+    pub fn build(self: *Self, ret: Local) Allocator.Error!void {
         self.func.blocks.set(self.ref, Block{
             .phi = self.phi,
             .ops = try self.ops.toOwnedSlice(self.ally),
-            .branch = branch,
+            .ret = ret,
         });
     }
 
@@ -146,10 +140,14 @@ pub const FuncBuilder = struct {
     blocks: Block.RefList = .{},
 
     /// finalize this function
-    pub fn build(self: *Self, returns: Type.Id) Allocator.Error!void {
+    pub fn build(self: *Self, entry: Block.Ref) Allocator.Error!void {
+        const entry_block = self.blocks.get(entry);
+        const returns = self.locals.get(entry_block.ret).*;
+
         self.program.funcs.set(self.ref, Func{
             .params = try self.params.toOwnedSlice(self.ally),
             .returns = returns,
+            .entry = entry,
             .locals = self.locals,
             .blocks = self.blocks,
         });
@@ -171,8 +169,8 @@ pub const FuncBuilder = struct {
     pub fn block(self: *Self, phi: ?Local) Allocator.Error!BlockBuilder {
         return BlockBuilder{
             .ally = self.ally,
-            .parent = self,
-            .ref = try self.blocks.new(),
+            .func = self,
+            .ref = try self.blocks.new(self.ally),
             .phi = phi,
         };
     }
@@ -199,16 +197,16 @@ pub const Builder = struct {
     }
 
     /// add a new constant to the function
-    pub fn constant(self: *Self, t: Type.Id) Allocator.Error!Constant.Ref {
-        return try self.constants.put(self.ally, t);
+    pub fn constant(self: *Self, c: Constant) Allocator.Error!Constant.Ref {
+        return try self.constants.put(self.ally, c);
     }
 
     /// add a new function to the program
     pub fn func(self: *Self) Allocator.Error!FuncBuilder {
         return FuncBuilder{
             .ally = self.ally,
-            .parent = self,
-            .ref = try self.funcs.new(),
+            .program = self,
+            .ref = try self.funcs.new(self.ally),
         };
     }
 };

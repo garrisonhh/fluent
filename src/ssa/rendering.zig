@@ -15,6 +15,7 @@ const theme = struct {
     const c = blox.Color.init;
     const label = c(.bright, .cyan);
     const opcode = c(.bright, .yellow);
+    const data = c(.bright, .magenta);
 };
 
 fn renderConstant(
@@ -22,10 +23,17 @@ fn renderConstant(
     prog: *const ssa.Program,
     constant: ssa.Constant.Ref,
 ) RenderError!blox.Div {
-    _ = mason;
-    _ = prog;
-    _ = constant;
-    @panic("TODO render ssa constant");
+    const ally = mason.ally;
+    const allocPrint = std.fmt.allocPrint;
+
+    const text = switch (prog.constants.get(constant).*) {
+        .unit => try allocPrint(ally, "()", .{}),
+        .bool => |b| try allocPrint(ally, "{}", .{b}),
+        inline .uint, .float => |n| try allocPrint(ally, "{d}", .{n}),
+    };
+    defer ally.free(text);
+
+    return try mason.newPre(text, .{ .fg = theme.data });
 }
 
 fn renderLocal(
@@ -37,16 +45,24 @@ fn renderLocal(
     const text = try std.fmt.bufPrint(&buf, " {%}", .{local});
 
     return try mason.newBox(&.{
-        try typer.render(mason, list.get(local)),
+        try typer.render(mason, list.get(local).*),
         try mason.newPre(text, .{}),
     }, span);
 }
 
+fn renderBlockRef(mason: *blox.Mason, ref: ssa.Block.Ref) RenderError!blox.Div {
+    var buf: [64]u8 = undefined;
+    const text = try std.fmt.bufPrint(&buf, "{@}", .{ref});
+    return try mason.newPre(text, .{ .fg = theme.label });
+}
+
 fn renderOp(
     mason: *blox.Mason,
+    prog: *const ssa.Program,
     local_list: *const ssa.LocalList,
     op: ssa.Op,
 ) RenderError!blox.Div {
+    const space = try mason.newPre(" ", .{});
     const comma = try mason.newPre(", ", .{});
 
     var buf: [64]u8 = undefined;
@@ -54,6 +70,17 @@ fn renderOp(
     const code_tag = try mason.newPre(code_text, .{ .fg = theme.opcode });
 
     const code = switch (op.code) {
+        .constant => |c| try renderConstant(mason, prog, c),
+
+        .branch => |br| try mason.newBox(&.{
+            code_tag,
+            try renderLocal(mason, local_list, br.cond),
+            space,
+            try renderBlockRef(mason, br.if_true),
+            comma,
+            try renderBlockRef(mason, br.if_true),
+        }, .{}),
+
         .add,
         .sub,
         .mul,
@@ -76,6 +103,7 @@ fn renderOp(
 
 fn renderBlock(
     mason: *blox.Mason,
+    prog: *const ssa.Program,
     func: *const ssa.Func,
     ref: ssa.Block.Ref,
 ) RenderError!blox.Div {
@@ -87,17 +115,19 @@ fn renderBlock(
     // TODO phi
 
     for (block.ops) |op| {
-        const div = try renderOp(mason, &func.locals, op);
+        const div = try renderOp(mason, prog, &func.locals, op);
         try divs.append(div);
     }
 
-    // TODO branch
+    // ret
+    try divs.append(try mason.newBox(&.{
+        try mason.newPre("returns", .{ .fg = theme.label }),
+        try mason.newSpacer(1, 1, .{}),
+        try renderLocal(mason, &func.locals, block.ret),
+    }, span));
 
     // stack it
-    var buf: [64]u8 = undefined;
-    const text = try std.fmt.bufPrint(&buf, "{@}", .{ref});
-
-    const label = try mason.newPre(text, .{ .fg = theme.label });
+    const label = try renderBlockRef(mason, ref);
     const indent = try mason.newSpacer(2, 0, .{});
 
     return try mason.newBox(&.{
@@ -106,7 +136,7 @@ fn renderBlock(
             indent,
             try mason.newBox(divs.items, .{}),
         }, span),
-    });
+    }, .{});
 }
 
 fn renderFunc(
@@ -121,7 +151,7 @@ fn renderFunc(
 
     var blocks = func.blocks.iterator();
     while (blocks.nextEntry()) |entry| {
-        const div = try renderBlock(mason, func, entry.ref);
+        const div = try renderBlock(mason, prog, func, entry.ref);
         try block_divs.append(div);
     }
 
@@ -138,7 +168,7 @@ fn renderFunc(
             indent,
             try mason.newBox(block_divs.items, .{}),
         }, span),
-    });
+    }, .{});
 }
 
 pub fn renderProgram(
