@@ -19,15 +19,9 @@ fn lowerExpr(
         .unit => try block.op(t, .{
             .constant = try prog.constant(.unit),
         }),
-        .bool => |v| try block.op(t, .{
-            .constant = try prog.constant(.{ .bool = v })
-        }),
-        .int => |v| try block.op(t, .{
-            .constant = try prog.constant(.{ .uint = v })
-        }),
-        .real => |v| try block.op(t, .{
-            .constant = try prog.constant(.{ .float = v })
-        }),
+        .bool => |v| try block.op(t, .{ .constant = try prog.constant(.{ .bool = v }) }),
+        .int => |v| try block.op(t, .{ .constant = try prog.constant(.{ .uint = v }) }),
+        .real => |v| try block.op(t, .{ .constant = try prog.constant(.{ .float = v }) }),
 
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
@@ -48,8 +42,30 @@ fn lowerExpr(
             break :bin try block.op(t, data);
         },
 
+        .@"if" => |@"if"| try block.op(t, .{
+            .branch = .{
+                .cond = try lowerExpr(ast, block, @"if".cond),
+                .if_true = try lowerBlockExpr(ast, func, @"if".if_true, null),
+                .if_false = try lowerBlockExpr(ast, func, @"if".if_false, null),
+            },
+        }),
+
         else => @panic("TODO"),
     };
+}
+
+/// lower an expr to its own block
+fn lowerBlockExpr(
+    ast: *const Ast,
+    func: *ssa.FuncBuilder,
+    node: Ast.Node,
+    phi: ?ssa.Local,
+) Error!ssa.Block.Ref {
+    var block = try func.block(phi);
+    const ret = try lowerExpr(ast, &block, node);
+    try block.build(ret);
+
+    return block.ref;
 }
 
 fn lowerFunc(
@@ -57,16 +73,14 @@ fn lowerFunc(
     prog: *ssa.Builder,
     node: Ast.Node,
     meta: Ast.Expr.Func,
-) Error!void {
+) Error!ssa.Func.Ref {
     _ = node;
 
-    var fb = try prog.func();
-    var entry = try fb.block(null);
+    var func = try prog.func();
+    const entry = try lowerBlockExpr(ast, &func, meta.body, null);
+    try func.build(entry);
 
-    const ret = try lowerExpr(ast, &entry, meta.body);
-
-    try entry.build(ret);
-    try fb.build(entry.ref);
+    return func.ref;
 }
 
 fn lowerTopLevelExpr(
@@ -79,11 +93,12 @@ fn lowerTopLevelExpr(
             // TODO how should name bindings work?
 
             switch (ast.get(let.expr).*) {
-                .func => |meta| try lowerFunc(ast, prog, let.expr, meta),
+                .func => |meta| {
+                    _ = try lowerFunc(ast, prog, let.expr, meta);
+                },
                 else => unreachable,
             }
         },
-
         else => unreachable,
     }
 }

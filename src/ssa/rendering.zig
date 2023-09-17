@@ -13,7 +13,7 @@ const span = blox.BoxOptions{ .direction = .right };
 
 const theme = struct {
     const c = blox.Color.init;
-    const label = c(.bright, .cyan);
+    const meta = c(.bright, .cyan);
     const opcode = c(.bright, .yellow);
     const data = c(.bright, .magenta);
 };
@@ -53,7 +53,7 @@ fn renderLocal(
 fn renderBlockRef(mason: *blox.Mason, ref: ssa.Block.Ref) RenderError!blox.Div {
     var buf: [64]u8 = undefined;
     const text = try std.fmt.bufPrint(&buf, "{@}", .{ref});
-    return try mason.newPre(text, .{ .fg = theme.label });
+    return try mason.newPre(text, .{ .fg = theme.meta });
 }
 
 fn renderOp(
@@ -79,7 +79,7 @@ fn renderOp(
             try renderBlockRef(mason, br.if_true),
             comma,
             try renderBlockRef(mason, br.if_true),
-        }, .{}),
+        }, span),
 
         .add,
         .sub,
@@ -121,7 +121,7 @@ fn renderBlock(
 
     // ret
     try divs.append(try mason.newBox(&.{
-        try mason.newPre("returns", .{ .fg = theme.label }),
+        try mason.newPre("returns", .{ .fg = theme.meta }),
         try mason.newSpacer(1, 1, .{}),
         try renderLocal(mason, &func.locals, block.ret),
     }, span));
@@ -149,6 +149,11 @@ fn renderFunc(
     var block_divs = std.ArrayList(blox.Div).init(mason.ally);
     defer block_divs.deinit();
 
+    try block_divs.append(try mason.newBox(&.{
+        try mason.newPre("enter ", .{ .fg = theme.meta }),
+        try renderBlockRef(mason, func.entry),
+    }, span));
+
     var blocks = func.blocks.iterator();
     while (blocks.nextEntry()) |entry| {
         const div = try renderBlock(mason, prog, func, entry.ref);
@@ -159,7 +164,7 @@ fn renderFunc(
     var buf: [64]u8 = undefined;
     const text = try std.fmt.bufPrint(&buf, "{func}", .{ref});
 
-    const label = try mason.newPre(text, .{ .fg = theme.label });
+    const label = try mason.newPre(text, .{ .fg = theme.meta });
     const indent = try mason.newSpacer(2, 0, .{});
 
     return try mason.newBox(&.{

@@ -171,7 +171,11 @@ fn analyzeBinary(
     };
 }
 
-fn analyzeFunc(ast: *Ast, node: Ast.Node, meta: Ast.Expr.Func,) SemaError!Type.Id {
+fn analyzeFunc(
+    ast: *Ast,
+    node: Ast.Node,
+    meta: Ast.Expr.Func,
+) SemaError!Type.Id {
     _ = node;
 
     const params = try analyzeExpr(ast, meta.params);
@@ -218,6 +222,19 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
             _ = try analyzeExpr(ast, let.expr);
 
             break :let let_type;
+        },
+        .@"if" => |@"if"| @"if": {
+            _ = try expect(ast, @"if".cond, typer.predef(.bool));
+            _ = try analyzeExpr(ast, @"if".if_true);
+            _ = try analyzeExpr(ast, @"if".if_false);
+
+            const branch_type = try expectMatching(
+                ast,
+                @"if".if_false,
+                @"if".if_true,
+            );
+
+            break :@"if" try ast.setType(node, branch_type);
         },
 
         .program => |prog| prog: {

@@ -70,6 +70,8 @@ pub fn main() !void {
     // test source
     const text =
         \\let a = fn () -> 3 * 4 + 5
+        \\let b = fn () ->
+        \\  if true then 1 else 0
     ;
     const source = try fluent.sources.add(ally, "test", text);
 
