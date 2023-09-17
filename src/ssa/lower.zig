@@ -12,16 +12,21 @@ fn lowerExpr(
     node: Ast.Node,
 ) Error!ssa.Local {
     const func = block.func;
-    const prog = func.program;
 
     const t = ast.getType(node).?;
     return switch (ast.get(node).*) {
         .unit => try block.op(t, .{
-            .constant = try prog.constant(.unit),
+            .constant = try func.constant(.unit),
         }),
-        .bool => |v| try block.op(t, .{ .constant = try prog.constant(.{ .bool = v }) }),
-        .int => |v| try block.op(t, .{ .constant = try prog.constant(.{ .uint = v }) }),
-        .real => |v| try block.op(t, .{ .constant = try prog.constant(.{ .float = v }) }),
+        .bool => |v| try block.op(t, .{
+            .constant = try func.constant(.{ .bool = v }),
+        }),
+        .int => |v| try block.op(t, .{
+            .constant = try func.constant(.{ .uint = v }),
+        }),
+        .real => |v| try block.op(t, .{
+            .constant = try func.constant(.{ .float = v }),
+        }),
 
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
@@ -70,12 +75,9 @@ fn lowerBlockExpr(
 
 fn lowerFunc(
     ast: *const Ast,
-    prog: *ssa.Builder,
-    node: Ast.Node,
+    prog: *ssa.Program,
     meta: Ast.Expr.Func,
 ) Error!ssa.Func.Ref {
-    _ = node;
-
     var func = try prog.func();
     const entry = try lowerBlockExpr(ast, &func, meta.body, null);
     try func.build(entry);
@@ -85,7 +87,7 @@ fn lowerFunc(
 
 fn lowerTopLevelExpr(
     ast: *const Ast,
-    prog: *ssa.Builder,
+    prog: *ssa.Program,
     node: Ast.Node,
 ) Error!void {
     switch (ast.get(node).*) {
@@ -94,7 +96,7 @@ fn lowerTopLevelExpr(
 
             switch (ast.get(let.expr).*) {
                 .func => |meta| {
-                    _ = try lowerFunc(ast, prog, let.expr, meta);
+                    _ = try lowerFunc(ast, prog, meta);
                 },
                 else => unreachable,
             }
@@ -103,20 +105,41 @@ fn lowerTopLevelExpr(
     }
 }
 
-/// lower a program into ssa form
-pub fn lower(
-    ally: Allocator,
-    ast: *const Ast,
-    program_node: Ast.Node,
-) Error!ssa.Program {
-    var prog = ssa.Builder.init(ally);
+pub const LowerInto = enum {
+    const Self = @This();
 
-    const expr = ast.get(program_node);
-    std.debug.assert(expr.* == .program);
+    program,
+    func,
 
-    for (expr.program) |toplevel| {
-        try lowerTopLevelExpr(ast, &prog, toplevel);
+    pub fn Returns(comptime self: Self) type {
+        return switch (self) {
+            .program => void,
+            .func => ssa.Func.Ref,
+        };
     }
+};
 
-    return prog.build();
+/// lower an analyzed ast into ssa
+pub fn lower(
+    ast: *const Ast,
+    program: *ssa.Program,
+    node: Ast.Node,
+    comptime into: LowerInto,
+) Error!into.Returns() {
+    const expr = ast.get(node);
+
+    switch (into) {
+        .program => {
+            std.debug.assert(expr.* == .program);
+
+            for (expr.program) |toplevel| {
+                try lowerTopLevelExpr(ast, program, toplevel);
+            }
+        },
+        .func => {
+            std.debug.assert(expr.* == .func);
+
+            return try lowerFunc(ast, program, expr.func);
+        },
+    }
 }

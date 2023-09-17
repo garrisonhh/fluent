@@ -47,8 +47,10 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     try writer.print("\n", .{});
 
     // lower to ssa
-    var ssa_prog = try fluent.lower(ally, &ast, root);
-    defer ssa_prog.deinit(ally);
+    var ssa_prog = fluent.ssa.Program.init(ally);
+    defer ssa_prog.deinit();
+
+    try fluent.lower(&ast, &ssa_prog, root, .program);
 
     // render ssa
     const ssa_div = try ssa_prog.render(&mason);

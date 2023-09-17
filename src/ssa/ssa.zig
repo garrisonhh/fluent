@@ -68,33 +68,52 @@ pub const Func = struct {
     params: []const Local,
     returns: Type.Id,
     entry: Block.Ref,
+    constants: Constant.RefList,
     locals: LocalList,
     blocks: Block.RefList,
 
-    fn deinit(f: *Func, ally: Allocator) void {
-        ally.free(f.params);
-        f.locals.deinit(ally);
+    pub fn deinit(self: *Self, ally: Allocator) void {
+        ally.free(self.params);
+        self.constants.deinit(ally);
+        self.locals.deinit(ally);
 
-        var block_iter = f.blocks.iterator();
+        var block_iter = self.blocks.iterator();
         while (block_iter.next()) |block| block.deinit(ally);
-        f.blocks.deinit(ally);
+        self.blocks.deinit(ally);
     }
 };
 
+/// a mutable image of the ssa state
 pub const Program = struct {
-    constants: Constant.RefList,
-    funcs: Func.RefList,
+    const Self = @This();
 
-    pub fn deinit(p: *Program, ally: Allocator) void {
-        p.constants.deinit(ally);
+    ally: Allocator,
+    funcs: Func.RefList = .{},
 
-        var func_iter = p.funcs.iterator();
-        while (func_iter.next()) |func| func.deinit(ally);
-        p.funcs.deinit(ally);
+    pub fn init(ally: Allocator) Self {
+        return .{ .ally = ally };
+    }
+
+    pub fn deinit(self: *Self) void {
+        const ally = self.ally;
+
+        var func_iter = self.funcs.iterator();
+        while (func_iter.next()) |f| f.deinit(ally);
+        self.funcs.deinit(ally);
     }
 
     pub const RenderError = rendering.RenderError;
     pub const render = rendering.renderProgram;
+
+    pub fn func(self: *Self) Allocator.Error!FuncBuilder {
+        const ally = self.ally;
+
+        return FuncBuilder{
+            .ally = ally,
+            .program = self,
+            .ref = try self.funcs.new(ally),
+        };
+    }
 };
 
 // builders ====================================================================
@@ -133,9 +152,10 @@ pub const FuncBuilder = struct {
     const Self = @This();
 
     ally: Allocator,
-    program: *Builder,
+    program: *Program,
     ref: Func.Ref,
     params: std.ArrayListUnmanaged(Local) = .{},
+    constants: Constant.RefList = .{},
     locals: LocalList = .{},
     blocks: Block.RefList = .{},
 
@@ -148,6 +168,7 @@ pub const FuncBuilder = struct {
             .params = try self.params.toOwnedSlice(self.ally),
             .returns = returns,
             .entry = entry,
+            .constants = self.constants,
             .locals = self.locals,
             .blocks = self.blocks,
         });
@@ -158,6 +179,11 @@ pub const FuncBuilder = struct {
         const p = try self.local(t);
         try self.params.append(p);
         return p;
+    }
+
+    /// add a new constant to the function
+    pub fn constant(self: *Self, c: Constant) Allocator.Error!Constant.Ref {
+        return try self.constants.put(self.ally, c);
     }
 
     /// add a new local to the function
@@ -172,41 +198,6 @@ pub const FuncBuilder = struct {
             .func = self,
             .ref = try self.blocks.new(self.ally),
             .phi = phi,
-        };
-    }
-};
-
-/// builds programs. the abstraction for creating ssa.
-pub const Builder = struct {
-    const Self = @This();
-
-    ally: Allocator,
-    constants: Constant.RefList = .{},
-    funcs: Func.RefList = .{},
-
-    pub fn init(ally: Allocator) Self {
-        return .{ .ally = ally };
-    }
-
-    /// finalize the program
-    pub fn build(self: Self) Program {
-        return Program{
-            .constants = self.constants,
-            .funcs = self.funcs,
-        };
-    }
-
-    /// add a new constant to the function
-    pub fn constant(self: *Self, c: Constant) Allocator.Error!Constant.Ref {
-        return try self.constants.put(self.ally, c);
-    }
-
-    /// add a new function to the program
-    pub fn func(self: *Self) Allocator.Error!FuncBuilder {
-        return FuncBuilder{
-            .ally = self.ally,
-            .program = self,
-            .ref = try self.funcs.new(self.ally),
         };
     }
 };

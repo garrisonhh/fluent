@@ -20,13 +20,13 @@ const theme = struct {
 
 fn renderConstant(
     mason: *blox.Mason,
-    prog: *const ssa.Program,
+    func: *const ssa.Func,
     constant: ssa.Constant.Ref,
 ) RenderError!blox.Div {
     const ally = mason.ally;
     const allocPrint = std.fmt.allocPrint;
 
-    const text = switch (prog.constants.get(constant).*) {
+    const text = switch (func.constants.get(constant).*) {
         .unit => try allocPrint(ally, "()", .{}),
         .bool => |b| try allocPrint(ally, "{}", .{b}),
         inline .uint, .float => |n| try allocPrint(ally, "{d}", .{n}),
@@ -38,14 +38,14 @@ fn renderConstant(
 
 fn renderLocal(
     mason: *blox.Mason,
-    list: *const ssa.LocalList,
+    func: *const ssa.Func,
     local: ssa.Local,
 ) RenderError!blox.Div {
     var buf: [64]u8 = undefined;
     const text = try std.fmt.bufPrint(&buf, " {%}", .{local});
 
     return try mason.newBox(&.{
-        try typer.render(mason, list.get(local).*),
+        try typer.render(mason, func.locals.get(local).*),
         try mason.newPre(text, .{}),
     }, span);
 }
@@ -58,8 +58,7 @@ fn renderBlockRef(mason: *blox.Mason, ref: ssa.Block.Ref) RenderError!blox.Div {
 
 fn renderOp(
     mason: *blox.Mason,
-    prog: *const ssa.Program,
-    local_list: *const ssa.LocalList,
+    func: *const ssa.Func,
     op: ssa.Op,
 ) RenderError!blox.Div {
     const space = try mason.newPre(" ", .{});
@@ -70,11 +69,11 @@ fn renderOp(
     const code_tag = try mason.newPre(code_text, .{ .fg = theme.opcode });
 
     const code = switch (op.code) {
-        .constant => |c| try renderConstant(mason, prog, c),
+        .constant => |c| try renderConstant(mason, func, c),
 
         .branch => |br| try mason.newBox(&.{
             code_tag,
-            try renderLocal(mason, local_list, br.cond),
+            try renderLocal(mason, func, br.cond),
             space,
             try renderBlockRef(mason, br.if_true),
             comma,
@@ -88,14 +87,14 @@ fn renderOp(
         .mod,
         => |data| try mason.newBox(&.{
             code_tag,
-            try renderLocal(mason, local_list, data[0]),
+            try renderLocal(mason, func, data[0]),
             comma,
-            try renderLocal(mason, local_list, data[1]),
+            try renderLocal(mason, func, data[1]),
         }, span),
     };
 
     return try mason.newBox(&.{
-        try renderLocal(mason, local_list, op.dest),
+        try renderLocal(mason, func, op.dest),
         try mason.newPre(" = ", .{}),
         code,
     }, span);
@@ -103,7 +102,6 @@ fn renderOp(
 
 fn renderBlock(
     mason: *blox.Mason,
-    prog: *const ssa.Program,
     func: *const ssa.Func,
     ref: ssa.Block.Ref,
 ) RenderError!blox.Div {
@@ -115,7 +113,7 @@ fn renderBlock(
     // TODO phi
 
     for (block.ops) |op| {
-        const div = try renderOp(mason, prog, &func.locals, op);
+        const div = try renderOp(mason, func, op);
         try divs.append(div);
     }
 
@@ -123,7 +121,7 @@ fn renderBlock(
     try divs.append(try mason.newBox(&.{
         try mason.newPre("returns", .{ .fg = theme.meta }),
         try mason.newSpacer(1, 1, .{}),
-        try renderLocal(mason, &func.locals, block.ret),
+        try renderLocal(mason, func, block.ret),
     }, span));
 
     // stack it
@@ -156,7 +154,7 @@ fn renderFunc(
 
     var blocks = func.blocks.iterator();
     while (blocks.nextEntry()) |entry| {
-        const div = try renderBlock(mason, prog, func, entry.ref);
+        const div = try renderBlock(mason, func, entry.ref);
         try block_divs.append(div);
     }
 

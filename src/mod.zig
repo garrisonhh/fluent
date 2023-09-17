@@ -24,6 +24,7 @@ pub const ssa = @import("ssa/ssa.zig");
 
 const lowering = @import("ssa/lower.zig");
 pub const LowerError = lowering.Error;
+pub const LowerInto = lowering.LowerInto;
 pub const lower = lowering.lower;
 
 // pipes =======================================================================
