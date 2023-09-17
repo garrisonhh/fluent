@@ -171,6 +171,19 @@ fn analyzeBinary(
     };
 }
 
+fn analyzeFunc(ast: *Ast, node: Ast.Node, meta: Ast.Expr.Func,) SemaError!Type.Id {
+    _ = node;
+
+    const params = try analyzeExpr(ast, meta.params);
+    const body = try analyzeExpr(ast, meta.body);
+
+    // TODO function types
+    _ = params;
+    _ = body;
+
+    return typer.predef(.unit);
+}
+
 fn analyzeQuoted(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.predef(.unit)),
@@ -196,6 +209,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
 
         .unary => |meta| try analyzeUnary(ast, node, meta),
         .binary => |meta| try analyzeBinary(ast, node, meta),
+        .func => |meta| try analyzeFunc(ast, node, meta),
 
         .let => |let| let: {
             const let_type = try ast.setType(node, typer.predef(.unit));

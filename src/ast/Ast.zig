@@ -54,6 +54,11 @@ pub const Expr = union(enum) {
         expr: Node,
     };
 
+    pub const Func = struct {
+        params: Node,
+        body: Node,
+    };
+
     pub const If = struct {
         cond: Node,
         if_true: Node,
@@ -72,6 +77,7 @@ pub const Expr = union(enum) {
     unary: Unary,
     binary: Binary,
     let: Let,
+    func: Func,
     @"if": If,
 
     fn deinit(self: Self, ally: Allocator) void {
@@ -84,6 +90,7 @@ pub const Expr = union(enum) {
             .unary,
             .binary,
             .let,
+            .func,
             .@"if",
             => {},
 

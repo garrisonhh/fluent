@@ -453,6 +453,27 @@ fn parseLet(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     });
 }
 
+fn parseFunc(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+    const @"fn" = try expectToken(ast, lexer, .@"fn");
+
+    const params = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "function parameters");
+    };
+
+    _ = try expectToken(ast, lexer, .right_arrow);
+
+    const body = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "function body");
+    };
+
+    return try ast.new(@"fn".loc, .{
+        .func = .{
+            .params = params,
+            .body = body,
+        },
+    });
+}
+
 fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     const @"if" = try expectToken(ast, lexer, .@"if");
 
@@ -488,6 +509,7 @@ fn parseExpr(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     const pk = try lexer.peek() orelse return null;
     return switch (pk.tag) {
         .let => try parseLet(ast, lexer),
+        .@"fn" => try parseFunc(ast, lexer),
         .@"if" => try parseIf(ast, lexer),
 
         else => try lowest_parser(ast, lexer),

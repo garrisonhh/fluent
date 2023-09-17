@@ -24,6 +24,7 @@ pub const Token = struct {
         false,
 
         let,
+        @"fn",
         @"if",
         then,
         @"else",
@@ -35,6 +36,7 @@ pub const Token = struct {
 
         ampersand,
         equals,
+        right_arrow,
         colon,
         semicolon,
         dot,
@@ -155,6 +157,7 @@ const Keyword = struct {
             "true",
             "false",
             "let",
+            "fn",
             "if",
             "then",
             "else",
@@ -202,6 +205,7 @@ const Symbol = struct {
             make("(", .lparen),
             make(")", .rparen),
             make("=", .equals),
+            make("->", .right_arrow),
             make(":", .colon),
             make(";", .semicolon),
             make(".", .dot),
