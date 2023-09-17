@@ -20,6 +20,12 @@ pub const SemaError = sema.Error;
 pub const SemaErrorMeta = sema.SemaErrorMeta;
 pub const analyze = sema.analyze;
 
+pub const ssa = @import("ssa/ssa.zig");
+
+const lowering = @import("ssa/lower.zig");
+pub const LowerError = lowering.Error;
+pub const lower = lowering.lower;
+
 // pipes =======================================================================
 
 const std = @import("std");
