@@ -61,7 +61,6 @@ fn renderOp(
     func: *const ssa.Func,
     op: ssa.Op,
 ) RenderError!blox.Div {
-    const space = try mason.newPre(" ", .{});
     const comma = try mason.newPre(", ", .{});
 
     var buf: [64]u8 = undefined;
@@ -74,10 +73,10 @@ fn renderOp(
         .branch => |br| try mason.newBox(&.{
             code_tag,
             try renderLocal(mason, func, br.cond),
-            space,
-            try renderBlockRef(mason, br.if_true),
             comma,
             try renderBlockRef(mason, br.if_true),
+            comma,
+            try renderBlockRef(mason, br.if_false),
         }, span),
 
         .add,
