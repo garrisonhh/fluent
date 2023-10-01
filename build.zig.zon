@@ -10,5 +10,9 @@
             .url = "https://github.com/garrisonhh/blox/tarball/2b72352c4c1520320e9f97c55dd254d2c8ac3d85",
             .hash = "1220b0f9e263a71b08b4ea173a7b34ae7e53ae51dd143243bf272fa463e036221d11",
         },
+        .@"fluent-wasm" = .{
+            .url = "https://github.com/garrisonhh/fluent-wasm/tarball/d069c0bdb6b910691d18cb56e27e9b804f787e1a",
+            .hash = "12203baf5d3d109118bf201458fdb03c034e0853757ac6d1e60ef56010e00353791e",
+        },
     },
 }
