@@ -154,10 +154,11 @@ fn analyzeBinary(
         .divide,
         .modulus,
         => arith: {
-            const lhs_type = try expectOneOf(ast, meta.lhs, &.{
-                typer.predef(.int),
-                typer.predef(.float),
-            });
+            const lhs_type = try expectOneOf(
+                ast,
+                meta.lhs,
+                typer.predefClass(.numbers),
+            );
 
             _ = try expectMatching(ast, meta.rhs, meta.lhs);
 
@@ -193,8 +194,8 @@ fn analyzeQuoted(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         .unit => try ast.setType(node, typer.predef(.unit)),
         .bool => try ast.setType(node, typer.predef(.bool)),
         .ident => try ast.setType(node, typer.predef(.ident)),
-        .int => try ast.setType(node, typer.predef(.int)),
-        .real => try ast.setType(node, typer.predef(.float)),
+        .int => try ast.setType(node, typer.predef(.i64)),
+        .real => try ast.setType(node, typer.predef(.f64)),
 
         else => |expr| std.debug.panic(
             "TODO analyze quoted {s}",
@@ -208,8 +209,8 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.predef(.unit)),
         .bool => try ast.setType(node, typer.predef(.bool)),
-        .int => try ast.setType(node, typer.predef(.int)),
-        .real => try ast.setType(node, typer.predef(.float)),
+        .int => try ast.setType(node, typer.predef(.i64)),
+        .real => try ast.setType(node, typer.predef(.f64)),
 
         .unary => |meta| try analyzeUnary(ast, node, meta),
         .binary => |meta| try analyzeBinary(ast, node, meta),

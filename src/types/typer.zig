@@ -36,17 +36,77 @@ pub const PredefinedType = enum {
     unit,
     ident,
     bool,
-    int,
-    float,
+    u8,
+    u16,
+    u32,
+    u64,
+    i8,
+    i16,
+    i32,
+    i64,
+    f32,
+    f64,
 
     fn initType(self: Self) Type {
         return switch (self) {
             inline .unit,
             .ident,
             .bool,
-            .int,
-            .float,
             => |tag| @unionInit(Type, @tagName(tag), {}),
+            .f32 => .{ .float = .{ .bits = .@"32" } },
+            .f64 => .{ .float = .{ .bits = .@"64" } },
+
+            .u8,
+            .u16,
+            .u32,
+            .u64,
+            .i8,
+            .i16,
+            .i32,
+            .i64,
+            => t: {
+                const tagname = @tagName(self);
+                const signedness: Type.Int.Signedness = switch (tagname[0]) {
+                    'i' => .signed,
+                    'u' => .unsigned,
+                    else => unreachable,
+                };
+
+                const bits = std.meta.stringToEnum(
+                    Type.Int.Bits,
+                    tagname[1..],
+                ).?;
+
+                break :t .{
+                    .int = .{
+                        .signedness = signedness,
+                        .bits = bits,
+                    },
+                };
+            },
+        };
+    }
+};
+
+/// a group of types cached on init
+pub const PredefinedClass = enum {
+    const Self = @This();
+
+    sints,
+    uints,
+    ints,
+    floats,
+    numbers,
+
+    fn getPredefs(self: Self) []const PredefinedType {
+        return switch (self) {
+            .sints => &.{ .i8, .i16, .i32, .i64 },
+            .uints => &.{ .u8, .u16, .u32, .u64 },
+            .ints => comptime Self.sints.getPredefs() ++
+                Self.uints.getPredefs(),
+            .floats => &.{ .f32, .f64 },
+            .numbers => comptime Self.ints.getPredefs() ++
+                Self.floats.getPredefs(),
         };
     }
 };
@@ -56,19 +116,32 @@ pub const PredefinedType = enum {
 var map = com.RefMap(Type.Id, Type){};
 var types = TypeHashMap{};
 var predef_cache = std.enums.EnumMap(PredefinedType, Type.Id){};
+var predef_cls_cache = std.enums.EnumMap(PredefinedClass, []const Type.Id){};
 
 pub fn init(ally: Allocator) Allocator.Error!void {
     for (std.enums.values(PredefinedType)) |p| {
         const id = try put(ally, p.initType());
         predef_cache.put(p, id);
     }
-}
 
-pub const RenderError = rendering.RenderError;
-pub const render = rendering.renderTypeId;
+    for (std.enums.values(PredefinedClass)) |c| {
+        const predefs = c.getPredefs();
+        const cls_types = try ally.alloc(Type.Id, predefs.len);
+        for (cls_types, predefs) |*slot, p| {
+            slot.* = predef(p);
+        }
+
+        predef_cls_cache.put(c, cls_types);
+    }
+}
 
 pub fn deinit(ally: Allocator) void {
     types.deinit(ally);
+
+    var cls_iter = predef_cls_cache.iterator();
+    while (cls_iter.next()) |entry| {
+        ally.free(entry.value.*);
+    }
 
     var iter = map.iterator();
     while (iter.next()) |t| t.deinit(ally);
@@ -79,12 +152,21 @@ pub fn deinit(ally: Allocator) void {
         map = .{};
         types = .{};
         predef_cache = .{};
+        predef_cls_cache = .{};
     }
 }
+
+pub const RenderError = rendering.RenderError;
+pub const render = rendering.renderTypeId;
 
 /// retrieve a predefined type's id
 pub fn predef(p: PredefinedType) Type.Id {
     return predef_cache.getAssertContains(p);
+}
+
+/// retrieve all ids for a predefined class
+pub fn predefClass(c: PredefinedClass) []const Type.Id {
+    return predef_cls_cache.getAssertContains(c);
 }
 
 /// returns the unique id for this type, which may be newly generated or

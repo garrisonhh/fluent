@@ -8,13 +8,34 @@ pub const Type = union(enum) {
     pub const Tag = std.meta.Tag(Self);
     pub const Id = com.Ref(.type, 32);
 
+    pub const Int = struct {
+        pub const Signedness = std.builtin.Signedness;
+
+        pub const Bits = enum {
+            @"8",
+            @"16",
+            @"32",
+            @"64",
+        };
+
+        signedness: Signedness,
+        bits: Bits,
+    };
+
+    pub const Float = struct {
+        pub const Bits = enum {
+            @"32",
+            @"64",
+        };
+
+        bits: Bits,
+    };
+
     unit,
     ident,
     bool,
-    // TODO bits
-    int,
-    // TODO bits
-    float,
+    int: Int,
+    float: Float,
 
     pub fn deinit(self: Self, ally: Allocator) void {
         _ = ally;
