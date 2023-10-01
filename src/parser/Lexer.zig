@@ -311,7 +311,7 @@ fn lex(self: *Lexer) Error!?Token {
         var mason = blox.Mason.init(ally);
         defer mason.deinit();
 
-        const rendered = fluent.sources.render(&mason, start_loc) catch |e| {
+        const rendered = start_loc.render(&mason) catch |e| {
             std.debug.panic("error in lexer logging: {s}\n", .{@errorName(e)});
         };
 

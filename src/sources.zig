@@ -77,5 +77,3 @@ pub fn add(
 pub fn get(src: Source) *const File {
     return map.get(src);
 }
-
-// rendering ===================================================================
