@@ -47,13 +47,19 @@ fn lowerExpr(
             break :bin try block.op(t, data);
         },
 
-        .@"if" => |@"if"| try block.op(t, .{
-            .branch = .{
-                .cond = try lowerExpr(ast, block, @"if".cond),
-                .if_true = try lowerBlockExpr(ast, func, @"if".if_true, null),
-                .if_false = try lowerBlockExpr(ast, func, @"if".if_false, null),
-            },
-        }),
+        .@"if" => |@"if"| @"if": {
+            const cond = try lowerExpr(ast, block, @"if".cond);
+            const if_t = try lowerBlockExpr(ast, func, @"if".if_true, cond);
+            const if_f = try lowerBlockExpr(ast, func, @"if".if_false, cond);
+
+            break :@"if" try block.op(t, .{
+                .branch = .{
+                    .cond = cond,
+                    .if_true = if_t,
+                    .if_false = if_f,
+                },
+            });
+        },
 
         else => @panic("TODO"),
     };
