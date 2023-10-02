@@ -9,13 +9,36 @@ pub const RenderError = blox.Error || std.fmt.AllocPrintError;
 const color = blox.Color.init(.normal, .green);
 
 fn renderType(mason: *blox.Mason, t: Type) RenderError!blox.Div {
+    const ally = mason.ally;
     return switch (t) {
         inline .unit,
         .ident,
         .bool,
-        .int,
-        .float,
         => |_, tag| try mason.newPre(@tagName(tag), .{ .fg = color }),
+
+        .int => |meta| int: {
+            const sign_ch: u8 = switch (meta.signedness) {
+                .signed => 'i',
+                .unsigned => 'u',
+            };
+
+            const str = try std.fmt.allocPrint(ally, "{c}{s}", .{
+                sign_ch,
+                @tagName(meta.bits),
+            });
+            defer ally.free(str);
+
+            break :int try mason.newPre(str, .{ .fg = color });
+        },
+
+        .float => |meta| float: {
+            const str = try std.fmt.allocPrint(ally, "f{s}", .{
+                @tagName(meta.bits),
+            });
+            defer ally.free(str);
+
+            break :float try mason.newPre(str, .{ .fg = color });
+        },
     };
 }
 
