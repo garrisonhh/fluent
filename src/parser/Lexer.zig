@@ -200,8 +200,8 @@ const Symbol = struct {
     const list = syms: {
         var arr = [_]Self{
             make("&", .ampersand),
-            make("{", .lparen),
-            make("}", .rparen),
+            make("{", .lcurly),
+            make("}", .rcurly),
             make("(", .lparen),
             make(")", .rparen),
             make("=", .equals),

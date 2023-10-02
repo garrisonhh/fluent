@@ -103,6 +103,33 @@ fn renderSyntaxError(
             .{@tagName(exp.tag)},
         ),
 
+        .expected_one_of => |exp| e: {
+            var list = std.ArrayList(u8).init(mason.ally);
+            defer list.deinit();
+            const writer = list.writer();
+
+            std.debug.assert(exp.tags.len >= 2);
+
+            const tags = exp.tags;
+
+            for (tags[0 .. tags.len - 2]) |tag| {
+                try writer.print("{s}, ", .{@tagName(tag)});
+            }
+
+            try writer.print("{s} or {s}", .{
+                @tagName(tags[tags.len - 2]),
+                @tagName(tags[tags.len - 1]),
+            });
+
+            break :e try simpleError(
+                mason,
+                .syntax,
+                exp.loc,
+                "expected one of {s}",
+                .{list.items},
+            );
+        },
+
         .expected_desc => |exp| try simpleError(
             mason,
             .syntax,
@@ -206,6 +233,28 @@ fn renderFieldData(
 
             break :nodes try mason.newBox(divs.items, .{});
         },
+        []const Ast.Expr.RecordEntry => kvs: {
+            const entry_tag = try mason.newPre("entry", .{ .fg = theme.tag });
+            const indent = try mason.newSpacer(2, 1, .{});
+
+            var divs = std.ArrayList(blox.Div).init(ally);
+            defer divs.deinit();
+
+            for (value) |entry| {
+                try divs.append(try mason.newBox(&.{
+                    entry_tag,
+                    try mason.newBox(&.{
+                        indent,
+                        try mason.newBox(&.{
+                            try self.render(mason, entry.key),
+                            try self.render(mason, entry.value),
+                        }, .{}),
+                    }, span),
+                }, .{}));
+            }
+
+            break :kvs try mason.newBox(divs.items, .{});
+        },
 
         else => {
             if (builtin.mode == .Debug) {
@@ -269,6 +318,7 @@ pub fn render(
 
         // containers
         inline .parens,
+        .record,
         .call,
         .unary,
         .binary,

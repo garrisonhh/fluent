@@ -172,6 +172,19 @@ fn analyzeBinary(
     };
 }
 
+fn analyzeRecord(
+    ast: *Ast,
+    node: Ast.Node,
+    entries: []const Ast.Expr.RecordEntry,
+) SemaError!Type.Id {
+    _ = ast;
+    _ = node;
+    _ = entries;
+
+    // TODO analyze records
+    return typer.predef(.unit);
+}
+
 fn analyzeFunc(
     ast: *Ast,
     node: Ast.Node,
@@ -214,6 +227,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
 
         .unary => |meta| try analyzeUnary(ast, node, meta),
         .binary => |meta| try analyzeBinary(ast, node, meta),
+        .record => |entries| try analyzeRecord(ast, node, entries),
         .func => |meta| try analyzeFunc(ast, node, meta),
 
         .let => |let| let: {

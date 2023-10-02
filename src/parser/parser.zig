@@ -38,6 +38,11 @@ pub const SyntaxErrorMeta = union(enum) {
         tag: Token.Tag,
     };
 
+    pub const ExpectedOneOf = struct {
+        loc: Loc,
+        tags: []const Token.Tag,
+    };
+
     pub const ExpectedDesc = struct {
         loc: Loc,
         desc: []const u8,
@@ -47,6 +52,7 @@ pub const SyntaxErrorMeta = union(enum) {
     invalid_literal: InvalidLiteral,
     expected_op_expr: ExpectedOpExpr,
     expected_token: ExpectedToken,
+    expected_one_of: ExpectedOneOf,
     expected_desc: ExpectedDesc,
 
     pub fn deinit(self: Self, ally: Allocator) void {
@@ -99,6 +105,19 @@ fn errorExpectedToken(
     });
 }
 
+fn errorExpectedOneOf(
+    ast: *Ast,
+    lexer: *const Lexer,
+    tags: []const Token.Tag,
+) ParseError {
+    return invalidSyntax(ast, .{
+        .expected_one_of = .{
+            .loc = lexer.nextLoc(),
+            .tags = tags,
+        },
+    });
+}
+
 fn errorExpectedDesc(
     ast: *Ast,
     lexer: *const Lexer,
@@ -132,10 +151,24 @@ fn expectToken(ast: *Ast, lexer: *Lexer, tag: Token.Tag) ParseError!Token {
         errorExpectedToken(ast, lexer, tag);
 }
 
+fn expectOneOf(
+    ast: *Ast,
+    lexer: *Lexer,
+    tags: []const Token.Tag,
+) ParseError!Token {
+    for (tags) |tag| {
+        if (try parseToken(lexer, tag)) |token| {
+            return token;
+        }
+    }
+
+    return errorExpectedOneOf(ast, lexer, tags);
+}
+
 const ParserFn = fn (*Ast, *Lexer) ParseError!?Ast.Node;
 
 /// a unary prefix parser
-fn prefixPrecedenceParser(
+fn unaryPrefixParser(
     comptime valid_tags: []const Token.Tag,
     comptime inner_parser: ParserFn,
 ) ParserFn {
@@ -194,7 +227,7 @@ fn binaryLeftPrecedenceParser(
     comptime inner_parser: ParserFn,
 ) ParserFn {
     return struct {
-        fn binaryParser(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+        fn parser(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
             var lhs = try inner_parser(ast, lexer) orelse {
                 return null;
             };
@@ -228,7 +261,7 @@ fn binaryLeftPrecedenceParser(
 
             return lhs;
         }
-    }.binaryParser;
+    }.parser;
 }
 
 fn binaryRightPrecedenceParser(
@@ -236,7 +269,7 @@ fn binaryRightPrecedenceParser(
     comptime inner_parser: ParserFn,
 ) ParserFn {
     return struct {
-        fn binaryParser(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+        fn parser(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
             var lhs = try inner_parser(ast, lexer) orelse {
                 return null;
             };
@@ -267,10 +300,10 @@ fn binaryRightPrecedenceParser(
                 },
             });
         }
-    }.binaryParser;
+    }.parser;
 }
 
-fn binaryPrecedenceParser(
+fn binaryParser(
     comptime binds: enum { left, right },
     comptime valid_tags: []const Token.Tag,
     comptime inner_parser: ParserFn,
@@ -359,20 +392,61 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
             break :parens try ast.new(pk.loc, .{ .parens = inner });
         },
 
-        // list/map literal
-        .lcurly => {
-            @panic("TODO list/map literals");
+        // record literal
+        .lcurly => curlys: {
+            lexer.accept(pk);
+
+            var entries = std.ArrayList(Ast.Expr.RecordEntry).init(ally);
+            defer entries.deinit();
+
+            // empty curlys
+            const pk2 = try lexer.peek() orelse {
+                break :curlys errorUnexpectedEof(ast, lexer);
+            };
+            if (pk2.tag == .rcurly) {
+                lexer.accept(pk2);
+                break :curlys try ast.new(pk.loc, .{
+                    .record = try entries.toOwnedSlice(),
+                });
+            }
+
+            // following elements
+            while (true) {
+                const entry_key = try parseExpr(ast, lexer) orelse {
+                    const desc = "record key";
+                    break :curlys errorExpectedDesc(ast, lexer, desc);
+                };
+
+                _ = try expectToken(ast, lexer, .colon);
+
+                const entry_value = try parseExpr(ast, lexer) orelse {
+                    const desc = "record value";
+                    break :curlys errorExpectedDesc(ast, lexer, desc);
+                };
+
+                try entries.append(.{
+                    .key = entry_key,
+                    .value = entry_value,
+                });
+
+                const next = try expectOneOf(ast, lexer, &.{.comma, .rcurly});
+                if (next.tag == .rcurly) break;
+            }
+
+            break :curlys try ast.new(pk.loc, .{
+                .record = try entries.toOwnedSlice(),
+            });
         },
 
         else => null,
     };
 }
 
-const parseName = binaryPrecedenceParser(.left, &.{.dot}, parseAtom);
+const parseName = binaryParser(.left, &.{.dot}, parseAtom);
 
 const unary_prefixes: []const Token.Tag = &.{ .minus, .ampersand };
 
-const parsePrefixedName = prefixPrecedenceParser(unary_prefixes, parseName);
+const parsePrefixedName = unaryPrefixParser(unary_prefixes, parseName);
 
 fn parseApplication(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     const inner_parser = parsePrefixedName;
@@ -403,30 +477,30 @@ fn parseApplication(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     });
 }
 
-const parsePrefixedApplication = prefixPrecedenceParser(
+const parsePrefixedApplication = unaryPrefixParser(
     unary_prefixes,
     parseApplication,
 );
 
-const parseMulDivMod = binaryPrecedenceParser(
+const parseMulDivMod = binaryParser(
     .left,
     &.{ .star, .slash, .percent },
     parsePrefixedApplication,
 );
 
-const parseAddSub = binaryPrecedenceParser(
+const parseAddSub = binaryParser(
     .left,
     &.{ .plus, .minus },
     parseMulDivMod,
 );
 
-const parseStatement = binaryPrecedenceParser(
+const parseStatement = binaryParser(
     .left,
     &.{.semicolon},
     parseAddSub,
 );
 
-const parseDef = binaryPrecedenceParser(
+const parseDef = binaryParser(
     .right,
     &.{.double_colon},
     parseStatement,

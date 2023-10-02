@@ -49,6 +49,11 @@ pub const Expr = union(enum) {
         rhs: Node,
     };
 
+    pub const RecordEntry = struct {
+        key: Node,
+        value: Node,
+    };
+
     pub const Let = struct {
         name: Node,
         expr: Node,
@@ -72,6 +77,7 @@ pub const Expr = union(enum) {
     real: Real,
 
     parens: Node,
+    record: []const RecordEntry,
     call: []const Node,
     program: []const Node,
     unary: Unary,
@@ -95,6 +101,7 @@ pub const Expr = union(enum) {
             => {},
 
             inline .ident,
+            .record,
             .call,
             .program,
             => |slice| ally.free(slice),
