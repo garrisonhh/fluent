@@ -6,6 +6,64 @@ const ssa = fluent.ssa;
 
 pub const Error = Allocator.Error;
 
+fn lowerTopLevelExpr(
+    ast: *const Ast,
+    prog: *ssa.Program,
+    node: Ast.Node,
+) Error!void {
+    switch (ast.get(node).*) {
+        .let => |let| {
+            // TODO how should name bindings work?
+
+            // TODO execute the body as code?
+
+            // functions
+            const expr = ast.get(let.expr);
+            if (expr.* == .binary and expr.binary.op == .function) {
+                _ = try lowerFunction(
+                    ast,
+                    prog,
+                    expr.binary.lhs,
+                    expr.binary.rhs,
+                );
+            } else {
+                @panic("TODO execute let const");
+            }
+        },
+        else => unreachable,
+    }
+}
+
+/// lower an expr to its own block
+fn lowerBlockExpr(
+    ast: *const Ast,
+    func: *ssa.FuncBuilder,
+    node: Ast.Node,
+    phi: ?ssa.Local,
+) Error!ssa.Block.Ref {
+    var block = try func.block(phi);
+    const ret = try lowerExpr(ast, &block, node);
+    try block.build(ret);
+
+    return block.ref;
+}
+
+fn lowerFunction(
+    ast: *const Ast,
+    prog: *ssa.Program,
+    params: Ast.Node,
+    body: Ast.Node,
+) Error!ssa.Func.Ref {
+    // TODO
+    _ = params;
+
+    var func = try prog.func();
+    const entry = try lowerBlockExpr(ast, &func, body, null);
+    try func.build(entry);
+
+    return func.ref;
+}
+
 fn lowerExpr(
     ast: *const Ast,
     block: *ssa.BlockBuilder,
@@ -65,100 +123,20 @@ fn lowerExpr(
     };
 }
 
-/// lower an expr to its own block
-fn lowerBlockExpr(
-    ast: *const Ast,
-    func: *ssa.FuncBuilder,
-    node: Ast.Node,
-    phi: ?ssa.Local,
-) Error!ssa.Block.Ref {
-    var block = try func.block(phi);
-    const ret = try lowerExpr(ast, &block, node);
-    try block.build(ret);
-
-    return block.ref;
-}
-
-fn lowerFunction(
-    ast: *const Ast,
-    prog: *ssa.Program,
-    params: Ast.Node,
-    body: Ast.Node,
-) Error!ssa.Func.Ref {
-    // TODO
-    _ = params;
-
-    var func = try prog.func();
-    const entry = try lowerBlockExpr(ast, &func, body, null);
-    try func.build(entry);
-
-    return func.ref;
-}
-
-fn lowerTopLevelExpr(
-    ast: *const Ast,
-    prog: *ssa.Program,
-    node: Ast.Node,
-) Error!void {
-    switch (ast.get(node).*) {
-        .let => |let| {
-            // TODO how should name bindings work?
-
-            // TODO execute the body as code?
-
-            // functions
-            const expr = ast.get(let.expr);
-            if (expr.* == .binary and expr.binary.op == .function) {
-                _ = try lowerFunction(
-                    ast,
-                    prog,
-                    expr.binary.lhs,
-                    expr.binary.rhs,
-                );
-            } else {
-                @panic("TODO execute let const");
-            }
-        },
-        else => unreachable,
-    }
-}
-
-pub const LowerInto = enum {
-    const Self = @This();
-
-    program,
-    func,
-
-    pub fn Returns(comptime self: Self) type {
-        return switch (self) {
-            .program => void,
-            .func => ssa.Func.Ref,
-        };
-    }
-};
-
-/// lower an analyzed ast into ssa
+/// lower an analyzed ast onto the ssa program context, and returns a func ref
+/// to the entry point of the program or expression you are lowering.
 pub fn lower(
     ast: *const Ast,
     program: *ssa.Program,
     node: Ast.Node,
-    comptime into: LowerInto,
-) Error!into.Returns() {
-    const expr = ast.get(node);
+) Error!ssa.Func.Ref {
+    var func = try program.func();
 
-    switch (into) {
-        .program => {
-            std.debug.assert(expr.* == .program);
+    const entry = switch (ast.get(node).*) {
+        .program => @panic("TODO lower program"),
+        else => try lowerBlockExpr(ast, &func, node, null),
+    };
 
-            for (expr.program) |toplevel| {
-                try lowerTopLevelExpr(ast, program, toplevel);
-            }
-        },
-        .func => {
-            std.debug.assert(expr.* == .binary);
-            std.debug.assert(expr.binary.op == .function);
-
-            return try lowerFunction(ast, program, expr.func);
-        },
-    }
+    try func.build(entry);
+    return func.ref;
 }

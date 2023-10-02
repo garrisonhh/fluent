@@ -14,7 +14,7 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var ast = fluent.Ast.init(ally);
     defer ast.deinit();
 
-    const root = switch (try fluent.parse(&ast, source, .program)) {
+    const root = switch (try fluent.parse(&ast, source, .expr)) {
         .ok => |node| node,
         .fail => {
             for (ast.getErrors()) |err| {
@@ -50,7 +50,8 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var ssa_prog = fluent.ssa.Program.init(ally);
     defer ssa_prog.deinit();
 
-    try fluent.lower(&ast, &ssa_prog, root, .program);
+    const ssa_entry = try fluent.lower(&ast, &ssa_prog, root);
+    _ = ssa_entry;
 
     // render ssa
     const ssa_div = try ssa_prog.render(&mason);
@@ -71,7 +72,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\let x = {} -> 1
+        \\1
     ;
     const source = try fluent.sources.add(ally, "test", text);
 

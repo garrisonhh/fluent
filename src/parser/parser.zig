@@ -582,36 +582,33 @@ fn parseProgram(ast: *Ast, lexer: *Lexer) ParseError!Ast.Node {
 pub const Into = enum {
     program,
     expr,
-
-    fn Returns(comptime into: Into) type {
-        return switch (into) {
-            .program => Result(Ast.Node),
-            .expr => Result(?Ast.Node),
-        };
-    }
 };
 
-pub fn Result(comptime T: type) type {
-    return union(enum) {
-        const Self = @This();
+pub const Result = union(enum) {
+    const Self = @This();
 
-        ok: T,
-        fail,
+    ok: Ast.Node,
+    fail,
 
-        fn wrap(eu: ParseError!T) Error!Self {
-            const val = eu catch |e| switch (e) {
-                InvalidSyntaxError.InvalidSyntax => {
-                    return .fail;
-                },
-                else => |filtered| {
-                    return @as(Error, @errSetCast(filtered));
-                },
-            };
+    fn filter(err: ParseError) Error!Self {
+        return switch (err) {
+            InvalidSyntaxError.InvalidSyntax => {
+                return .fail;
+            },
+            else => |filtered| {
+                return @as(Error, @errSetCast(filtered));
+            },
+        };
+    }
 
-            return .{ .ok = val };
-        }
-    };
-}
+    fn wrap(eu: ParseError!Ast.Node) Error!Self {
+        const val = eu catch |e| {
+            return filter(e);
+        };
+
+        return .{ .ok = val };
+    }
+};
 
 /// parse text into an ast node
 /// *remember to check ast for errors if there is a syntax error!*
@@ -619,12 +616,19 @@ pub fn parse(
     ast: *Ast,
     source: fluent.Source,
     comptime into: Into,
-) Error!into.Returns() {
-    const Returns = into.Returns();
+) Error!Result {
     var lexer = Lexer.init(source);
 
     return switch (into) {
-        .program => try Returns.wrap(parseProgram(ast, &lexer)),
-        .expr => try Returns.wrap(parseExpr(ast, &lexer)),
+        .program => try Result.wrap(parseProgram(ast, &lexer)),
+        .expr => x: {
+            const node = parseExpr(ast, &lexer) catch |e| {
+                break :x Result.filter(e);
+            } orelse {
+                break :x Result.filter(errorUnexpectedEof(ast, &lexer));
+            };
+
+            break :x .{ .ok = node };
+        },
     };
 }
