@@ -71,8 +71,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\let f = fn {} ->
-        \\  if true then 1 else 2
+        \\let x = {} -> 1
     ;
     const source = try fluent.sources.add(ally, "test", text);
 

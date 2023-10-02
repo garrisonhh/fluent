@@ -325,6 +325,7 @@ fn unaryOpFromTokenTag(tag: Token.Tag) ?Ast.UnaryOp {
 fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
     return switch (tag) {
         .semicolon => .statement,
+        .right_arrow => .function,
         .dot => .field_access,
         .plus => .add,
         .minus => .subtract,
@@ -429,7 +430,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
                     .value = entry_value,
                 });
 
-                const next = try expectOneOf(ast, lexer, &.{.comma, .rcurly});
+                const next = try expectOneOf(ast, lexer, &.{ .comma, .rcurly });
                 if (next.tag == .rcurly) break;
             }
 
@@ -494,16 +495,10 @@ const parseAddSub = binaryParser(
     parseMulDivMod,
 );
 
-const parseStatement = binaryParser(
+const parseFuncStmt = binaryParser(
     .left,
-    &.{.semicolon},
+    &.{ .right_arrow, .semicolon },
     parseAddSub,
-);
-
-const parseDef = binaryParser(
-    .right,
-    &.{.double_colon},
-    parseStatement,
 );
 
 fn parseLet(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
@@ -527,27 +522,6 @@ fn parseLet(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     });
 }
 
-fn parseFunc(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-    const @"fn" = try expectToken(ast, lexer, .@"fn");
-
-    const params = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "function parameters");
-    };
-
-    _ = try expectToken(ast, lexer, .right_arrow);
-
-    const body = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "function body");
-    };
-
-    return try ast.new(@"fn".loc, .{
-        .func = .{
-            .params = params,
-            .body = body,
-        },
-    });
-}
-
 fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     const @"if" = try expectToken(ast, lexer, .@"if");
 
@@ -558,13 +532,13 @@ fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     _ = try expectToken(ast, lexer, .then);
 
     const if_true = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "'true' branch of if/then/else");
+        return errorExpectedDesc(ast, lexer, "'then' branch of if expression");
     };
 
     _ = try expectToken(ast, lexer, .@"else");
 
     const if_false = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "'false' branch of if/then/else");
+        return errorExpectedDesc(ast, lexer, "'else' branch of if expression");
     };
 
     return try ast.new(@"if".loc, .{
@@ -578,12 +552,11 @@ fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
 /// the lowest precedence parser
 fn parseExpr(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-    const lowest_parser = parseStatement;
+    const lowest_parser = parseFuncStmt;
 
     const pk = try lexer.peek() orelse return null;
     return switch (pk.tag) {
         .let => try parseLet(ast, lexer),
-        .@"fn" => try parseFunc(ast, lexer),
         .@"if" => try parseIf(ast, lexer),
 
         else => try lowest_parser(ast, lexer),

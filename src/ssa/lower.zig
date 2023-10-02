@@ -79,13 +79,17 @@ fn lowerBlockExpr(
     return block.ref;
 }
 
-fn lowerFunc(
+fn lowerFunction(
     ast: *const Ast,
     prog: *ssa.Program,
-    meta: Ast.Expr.Func,
+    params: Ast.Node,
+    body: Ast.Node,
 ) Error!ssa.Func.Ref {
+    // TODO
+    _ = params;
+
     var func = try prog.func();
-    const entry = try lowerBlockExpr(ast, &func, meta.body, null);
+    const entry = try lowerBlockExpr(ast, &func, body, null);
     try func.build(entry);
 
     return func.ref;
@@ -100,11 +104,19 @@ fn lowerTopLevelExpr(
         .let => |let| {
             // TODO how should name bindings work?
 
-            switch (ast.get(let.expr).*) {
-                .func => |meta| {
-                    _ = try lowerFunc(ast, prog, meta);
-                },
-                else => unreachable,
+            // TODO execute the body as code?
+
+            // functions
+            const expr = ast.get(let.expr);
+            if (expr.* == .binary and expr.binary.op == .function) {
+                _ = try lowerFunction(
+                    ast,
+                    prog,
+                    expr.binary.lhs,
+                    expr.binary.rhs,
+                );
+            } else {
+                @panic("TODO execute let const");
             }
         },
         else => unreachable,
@@ -143,9 +155,10 @@ pub fn lower(
             }
         },
         .func => {
-            std.debug.assert(expr.* == .func);
+            std.debug.assert(expr.* == .binary);
+            std.debug.assert(expr.binary.op == .function);
 
-            return try lowerFunc(ast, program, expr.func);
+            return try lowerFunction(ast, program, expr.func);
         },
     }
 }
