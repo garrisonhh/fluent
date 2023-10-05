@@ -72,7 +72,14 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\1
+        \\let fib = {n: u64} ->
+        \\  if n == 0 then
+        \\    1
+        \\  else if n == 1 then
+        \\    1
+        \\  else
+        \\    fib (n - 1) + fib (n - 2)
+        \\
     ;
     const source = try fluent.sources.add(ally, "test", text);
 

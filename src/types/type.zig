@@ -31,25 +31,59 @@ pub const Type = union(enum) {
         bits: Bits,
     };
 
+    pub const Field = struct {
+        name: []const u8,
+        type: Id,
+    };
+
+    pub const Struct = struct {
+        fields: []const Field,
+    };
+
     unit,
+    type,
     ident,
     bool,
     int: Int,
     float: Float,
+    @"struct": Struct,
 
     pub fn deinit(self: Self, ally: Allocator) void {
-        _ = ally;
         switch (self) {
             .unit,
+            .type,
             .ident,
             .bool,
             .int,
             .float,
             => {},
+
+            .@"struct" => |st| {
+                for (st.fields) |field| ally.free(field.name);
+                ally.free(st.fields);
+            },
         }
     }
 
-    pub fn eql(self: Self, other: Self) bool {
-        return std.meta.eql(self, other);
+    pub fn clone(self: Self, ally: Allocator) Allocator.Error!Self {
+        var owned = self;
+        switch (owned) {
+            .unit,
+            .type,
+            .ident,
+            .bool,
+            .int,
+            .float,
+            => {},
+
+            .@"struct" => |*st| {
+                st.fields = try ally.dupe(Type.Field, st.fields);
+                for (st.fields) |*field| {
+                    field.name = try ally.dupe(u8, field.name);
+                }
+            },
+        }
+
+        return owned;
     }
 };

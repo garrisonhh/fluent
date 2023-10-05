@@ -7,25 +7,151 @@ const com = @import("common");
 const rendering = @import("rendering.zig");
 const Type = @import("type.zig").Type;
 
-const TypeHashMapContext = struct {
+/// recursively hashes Type with awareness of self referencing
+fn autoHashType(
+    comptime T: type,
+    x: T,
+    this: Type.Id,
+    hasher: *TypeSetContext.Hasher,
+) void {
+    const b = std.mem.asBytes;
+
+    switch (T) {
+        []const u8 => hasher.update(x),
+
+        Type => {
+            hasher.update(b(&@as(Type.Tag, x)));
+
+            switch (x) {
+                inline else => |data| {
+                    autoHashType(@TypeOf(data), data, this, hasher);
+                },
+            }
+        },
+
+        // hash id with awareness of self
+        Type.Id => {
+            if (this.eql(x)) {
+                // the constant used here does not matter (in terms of
+                // correctness) as long as it's a constant
+                hasher.update("this");
+            } else {
+                hasher.update(b(&x));
+            }
+        },
+
+        // hash value directly
+        void,
+        Type.Int.Signedness,
+        Type.Int.Bits,
+        Type.Float.Bits,
+        => {
+            hasher.update(b(&x));
+        },
+
+        // hash slice of hashable
+        []const Type.Field => {
+            for (x) |elem| {
+                autoHashType(@TypeOf(elem), elem, this, hasher);
+            }
+        },
+
+        // hash struct fields
+        Type.Int,
+        Type.Float,
+        Type.Field,
+        Type.Struct,
+        => {
+            inline for (@typeInfo(T).Struct.fields) |field| {
+                autoHashType(field.type, @field(x, field.name), this, hasher);
+            }
+        },
+
+        else => {
+            if (builtin.mode == .Debug) {
+                std.debug.panic("cannot hash type {}", .{T});
+            } else unreachable;
+        },
+    }
+}
+
+/// recursively checks Type for equality with awareness of self referencing
+fn autoEqlType(
+    comptime T: type,
+    a: T,
+    this_a: Type.Id,
+    b: T,
+    this_b: Type.Id,
+) bool {
+    return switch (T) {
+        Type.Int.Signedness,
+        Type.Int.Bits,
+        Type.Float.Bits,
+        => a == b,
+
+        []const u8 => std.mem.eql(u8, a, b),
+
+        Type.Id => eql: {
+            const a_is_this = a.eql(this_a);
+            const b_is_this = b.eql(this_b);
+
+            // either they are both this, or neither are this and they are
+            // the same id
+            break :eql a_is_this and b_is_this or
+                !a_is_this and !b_is_this and a.eql(b);
+        },
+
+        Type => eql: {
+            if (@as(Type.Tag, a) != @as(Type.Tag, b)) {
+                break :eql false;
+            }
+
+            switch (a) {
+                inline else => |data_a, tag| {
+                    const data_b = @field(b, @tagName(tag));
+                    break :eql autoEqlType(
+                        @TypeOf(data_a, data_b),
+                        data_a,
+                        this_a,
+                        data_b,
+                        this_b,
+                    );
+                },
+            }
+        },
+
+        else => {
+            if (builtin.mode == .Debug) {
+                std.debug.panic("cannot auto eql two of {}", .{T});
+            } else unreachable;
+        },
+    };
+}
+
+const TypeEntry = struct {
+    id: Type.Id,
+    type: *const Type,
+};
+
+const TypeSetContext = struct {
     const Hasher = std.hash.Wyhash;
     const seed = 0xBEEF_FA75;
 
-    pub fn hash(_: @This(), t: *const Type) u64 {
+    pub fn hash(_: @This(), entry: TypeEntry) u64 {
         var hasher = Hasher.init(seed);
-        std.hash.autoHash(&hasher, t.*);
+        autoHashType(Type, entry.type.*, entry.id, &hasher);
         return hasher.final();
     }
 
-    pub fn eql(_: @This(), a: *const Type, b: *const Type) bool {
-        return a.eql(b.*);
+    pub fn eql(_: @This(), a: TypeEntry, b: TypeEntry) bool {
+        return autoEqlType(Type, a.type.*, a.id, b.type.*, b.id);
     }
 };
 
-const TypeHashMap = std.HashMapUnmanaged(
-    *const Type,
-    Type.Id,
-    TypeHashMapContext,
+const TypeSet = std.HashMapUnmanaged(
+    TypeEntry,
+    void,
+    TypeSetContext,
     std.hash_map.default_max_load_percentage,
 );
 
@@ -34,6 +160,7 @@ pub const PredefinedType = enum {
     const Self = @This();
 
     unit,
+    type,
     ident,
     bool,
     u8,
@@ -47,9 +174,11 @@ pub const PredefinedType = enum {
     f32,
     f64,
 
-    fn initType(self: Self) Type {
+    fn initType(self: Self, ally: Allocator) Allocator.Error!Type {
+        _ = ally;
         return switch (self) {
             inline .unit,
+            .type,
             .ident,
             .bool,
             => |tag| @unionInit(Type, @tagName(tag), {}),
@@ -114,13 +243,14 @@ pub const PredefinedClass = enum {
 // interface ===================================================================
 
 var map = com.RefMap(Type.Id, Type){};
-var types = TypeHashMap{};
+var types = TypeSet{};
 var predef_cache = std.enums.EnumMap(PredefinedType, Type.Id){};
 var predef_cls_cache = std.enums.EnumMap(PredefinedClass, []const Type.Id){};
 
 pub fn init(ally: Allocator) Allocator.Error!void {
     for (std.enums.values(PredefinedType)) |p| {
-        const id = try put(ally, p.initType());
+        const t = try p.initType(ally);
+        const id = try put(ally, t);
         predef_cache.put(p, id);
     }
 
@@ -169,17 +299,40 @@ pub fn predefClass(c: PredefinedClass) []const Type.Id {
     return predef_cls_cache.getAssertContains(c);
 }
 
-/// returns the unique id for this type, which may be newly generated or
-/// retrieved from a previous put() call
-pub fn put(ally: Allocator, init_type: Type) Allocator.Error!Type.Id {
-    // find previous id
-    const res = try types.getOrPut(ally, &init_type);
-    if (res.found_existing) return res.value_ptr.*;
+/// creates an uninitiated type id
+///
+/// *you must call `set` on the id before it is accessed*
+pub fn new(ally: Allocator) Allocator.Error!Type.Id {
+    return try map.new(ally);
+}
 
-    // new id
-    const id = try map.put(ally, init_type);
-    res.key_ptr.* = map.get(id);
-    res.value_ptr.* = id;
+/// store a possibly self-referential type with a `this` id created using `new`
+///
+/// *type ownership is moved on calling this*
+pub fn set(ally: Allocator, this: Type.Id, t: Type) Allocator.Error!void {
+    const res = try types.getOrPut(ally, .{
+        .id = this,
+        // remember this is a dangling pointer
+        .type = &t,
+    });
+
+    if (!res.found_existing) {
+        // new entry
+        try map.set(ally, this, t);
+        res.key_ptr.* = .{
+            .id = this,
+            .type = map.get(this),
+        };
+    }
+}
+
+/// create an un-self-referential type
+///
+/// *type ownership is moved on calling this*
+pub fn put(ally: Allocator, t: Type) Allocator.Error!Type.Id {
+    errdefer t.deinit(ally);
+    const id = try new(ally);
+    try set(ally, id, t);
 
     return id;
 }

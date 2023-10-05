@@ -21,26 +21,50 @@ pub const Constant = union(enum) {
 };
 
 pub const Opcode = union(enum) {
+    const Self = @This();
+
     pub const Branch = struct {
         cond: Local,
         if_true: Block.Ref,
         if_false: Block.Ref,
     };
 
+    pub const Call = struct {
+        func: Func.Ref,
+        /// owned
+        args: []const Local,
+    };
+
     constant: Constant.Ref,
     branch: Branch,
+    call: Call,
 
     add: [2]Local,
     sub: [2]Local,
     mul: [2]Local,
     div: [2]Local,
     mod: [2]Local,
+
+    eq: [2]Local,
+
+    fn deinit(self: Self, ally: Allocator) void {
+        switch (self) {
+            .call => |call| ally.free(call.args),
+            else => {},
+        }
+    }
 };
 
 /// instructions that operate on values
 pub const Op = struct {
+    const Self = @This();
+
     dest: Local,
     code: Opcode,
+
+    fn deinit(self: Self, ally: Allocator) void {
+        self.code.deinit(ally);
+    }
 };
 
 pub const Block = struct {
@@ -55,8 +79,9 @@ pub const Block = struct {
     /// what this block returns
     ret: Local,
 
-    fn deinit(b: Block, ally: Allocator) void {
-        ally.free(b.ops);
+    fn deinit(self: Self, ally: Allocator) void {
+        for (self.ops) |op| op.deinit(ally);
+        ally.free(self.ops);
     }
 };
 

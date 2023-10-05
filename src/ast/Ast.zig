@@ -30,6 +30,8 @@ pub const BinaryOp = enum {
     multiply,
     divide,
     modulus,
+
+    eq,
 };
 
 pub const Expr = union(enum) {

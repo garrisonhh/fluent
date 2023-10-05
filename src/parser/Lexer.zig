@@ -45,6 +45,7 @@ pub const Token = struct {
         star,
         slash,
         percent,
+        eq,
     };
 
     /// starting location
@@ -213,6 +214,7 @@ const Symbol = struct {
             make("*", .star),
             make("/", .slash),
             make("%", .percent),
+            make("==", .eq),
         };
 
         const by_reverse_len = struct {

@@ -91,6 +91,7 @@ fn expectOneOf(
     }
 }
 
+/// analyzes node and expects it to match the provided node
 fn expectMatching(
     ast: *Ast,
     node: Ast.Node,
@@ -141,20 +142,60 @@ fn analyzeUnary(
     @panic("TODO analyze unary op");
 }
 
-fn analyzeFunction(
+/// dirty evil hack to get function parameter sema working
+/// TODO remove this and do it correctly once I can eval types
+fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
+    const ally = ast.ally;
+
+    var divs = std.ArrayList(Type.Field).init(ally);
+    defer divs.deinit();
+
+    const record_entries = ast.get(node).record;
+    for (record_entries) |entry| {
+        const name = ast.get(entry.key).ident;
+        const typename = ast.get(entry.value).ident;
+        const predef = std.meta.stringToEnum(typer.PredefinedType, typename).?;
+
+        try divs.append(.{
+            .name = try ally.dupe(u8, name),
+            .type = typer.predef(predef),
+        });
+    }
+
+    const params_type = try typer.put(ally, .{
+        .@"struct" = .{ .fields = try divs.toOwnedSlice() },
+    });
+
+    {
+        const stderr = std.io.getStdErr().writer();
+
+        var mason = blox.Mason.init(ally);
+        defer mason.deinit();
+
+        const div = typer.render(&mason, params_type) catch @panic("OOM");
+
+        stderr.print("[rec]\n", .{}) catch {};
+        mason.write(div, stderr, .{}) catch {};
+        stderr.print("\n", .{}) catch {};
+    }
+
+    return try ast.setType(node, params_type);
+}
+
+fn analyzeFunc(
     ast: *Ast,
     node: Ast.Node,
-    param_node: Ast.Node,
-    body_node: Ast.Node,
+    params: Ast.Node,
+    body: Ast.Node
 ) SemaError!Type.Id {
     _ = node;
 
-    const params = try analyzeExpr(ast, param_node);
-    const body = try analyzeExpr(ast, body_node);
+    const params_type = try dirtyEvilHackAnalyzeFuncParams(ast, params);
+    const body_type = try analyzeExpr(ast, body);
 
     // TODO function types
-    _ = params;
-    _ = body;
+    _ = params_type;
+    _ = body_type;
 
     return typer.predef(.unit);
 }
@@ -165,7 +206,7 @@ fn analyzeBinary(
     meta: Ast.Expr.Binary,
 ) SemaError!Type.Id {
     return switch (meta.op) {
-        .function => try analyzeFunction(ast, node, meta.lhs, meta.rhs),
+        .function => try analyzeFunc(ast, node, meta.lhs, meta.rhs),
 
         // arithmetic
         .add,
@@ -185,11 +226,33 @@ fn analyzeBinary(
             break :arith try ast.setType(node, lhs_type);
         },
 
+        // conditions
+        .eq => any: {
+            _ = try analyzeExpr(ast, meta.lhs);
+            _ = try expectMatching(ast, meta.rhs, meta.lhs);
+
+            break :any try ast.setType(node, typer.predef(.bool));
+        },
+
         else => |op| std.debug.panic(
             "TODO analyze binary {s}",
             .{@tagName(op)},
         ),
     };
+}
+
+fn analyzeCall(
+    ast: *Ast,
+    node: Ast.Node,
+    call: []const Ast.Node,
+) SemaError!Type.Id {
+    _ = ast;
+    _ = node;
+    _ = call;
+
+    // TODO analyse call
+
+    return typer.predef(.unit);
 }
 
 fn analyzeRecord(
@@ -231,6 +294,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         .unary => |meta| try analyzeUnary(ast, node, meta),
         .binary => |meta| try analyzeBinary(ast, node, meta),
         .record => |entries| try analyzeRecord(ast, node, entries),
+        .call => |call| try analyzeCall(ast, node, call),
 
         .let => |let| let: {
             const let_type = try ast.setType(node, typer.predef(.unit));
@@ -243,7 +307,6 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         .@"if" => |@"if"| @"if": {
             _ = try expect(ast, @"if".cond, typer.predef(.bool));
             _ = try analyzeExpr(ast, @"if".if_true);
-            _ = try analyzeExpr(ast, @"if".if_false);
 
             const branch_type = try expectMatching(
                 ast,

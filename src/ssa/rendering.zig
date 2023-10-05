@@ -56,6 +56,12 @@ fn renderBlockRef(mason: *blox.Mason, ref: ssa.Block.Ref) RenderError!blox.Div {
     return try mason.newPre(text, .{ .fg = theme.meta });
 }
 
+fn renderFuncRef(mason: *blox.Mason, ref: ssa.Func.Ref) RenderError!blox.Div {
+    var buf: [64]u8 = undefined;
+    const text = try std.fmt.bufPrint(&buf, "{func}", .{ref});
+    return try mason.newPre(text, .{ .fg = theme.meta });
+}
+
 fn renderOp(
     mason: *blox.Mason,
     func: *const ssa.Func,
@@ -79,11 +85,29 @@ fn renderOp(
             try renderBlockRef(mason, br.if_false),
         }, span),
 
+        .call => |call| call: {
+            var divs = std.ArrayList(blox.Div).init(mason.ally);
+            defer divs.deinit();
+
+            try divs.appendSlice(&.{
+                code_tag,
+                try renderFuncRef(mason, call.func),
+            });
+
+            for (call.args, 0..) |arg, i| {
+                if (i > 0) try divs.append(comma);
+                try divs.append(try renderLocal(mason, func, arg));
+            }
+
+            break :call try mason.newBox(divs.items, span);
+        },
+
         .add,
         .sub,
         .mul,
         .div,
         .mod,
+        .eq,
         => |data| try mason.newBox(&.{
             code_tag,
             try renderLocal(mason, func, data[0]),

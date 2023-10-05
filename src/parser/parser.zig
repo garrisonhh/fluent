@@ -332,14 +332,68 @@ fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
         .star => .multiply,
         .slash => .divide,
         .percent => .modulus,
+        .eq => .eq,
         else => null,
     };
+}
+
+fn parseLet(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+    const let = try expectToken(ast, lexer, .let);
+
+    const name = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "identifier for let expression");
+    };
+
+    _ = try expectToken(ast, lexer, .equals);
+
+    const expr = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "value for let expression");
+    };
+
+    return try ast.new(let.loc, .{
+        .let = .{
+            .name = name,
+            .expr = expr,
+        },
+    });
+}
+
+fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+    const @"if" = try expectToken(ast, lexer, .@"if");
+
+    const cond = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "condition");
+    };
+
+    _ = try expectToken(ast, lexer, .then);
+
+    const if_true = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "'then' branch of if expression");
+    };
+
+    _ = try expectToken(ast, lexer, .@"else");
+
+    const if_false = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "'else' branch of if expression");
+    };
+
+    return try ast.new(@"if".loc, .{
+        .@"if" = .{
+            .cond = cond,
+            .if_true = if_true,
+            .if_false = if_false,
+        },
+    });
 }
 
 fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     const ally = ast.ally;
     const pk = try lexer.peek() orelse return null;
     return switch (pk.tag) {
+        // tokens with one possible result
+        .let => try parseLet(ast, lexer),
+        .@"if" => try parseIf(ast, lexer),
+
         // atomic tokens
         .ident => ident: {
             const ident = try ally.dupe(u8, lexer.slice(pk));
@@ -495,73 +549,20 @@ const parseAddSub = binaryParser(
     parseMulDivMod,
 );
 
-const parseFuncStmt = binaryParser(
+const parseConditions = binaryParser(
     .left,
-    &.{ .right_arrow, .semicolon },
+    &.{.eq},
     parseAddSub,
 );
 
-fn parseLet(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-    const let = try expectToken(ast, lexer, .let);
-
-    const name = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "identifier for let expression");
-    };
-
-    _ = try expectToken(ast, lexer, .equals);
-
-    const expr = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "value for let expression");
-    };
-
-    return try ast.new(let.loc, .{
-        .let = .{
-            .name = name,
-            .expr = expr,
-        },
-    });
-}
-
-fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-    const @"if" = try expectToken(ast, lexer, .@"if");
-
-    const cond = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "condition");
-    };
-
-    _ = try expectToken(ast, lexer, .then);
-
-    const if_true = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "'then' branch of if expression");
-    };
-
-    _ = try expectToken(ast, lexer, .@"else");
-
-    const if_false = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "'else' branch of if expression");
-    };
-
-    return try ast.new(@"if".loc, .{
-        .@"if" = .{
-            .cond = cond,
-            .if_true = if_true,
-            .if_false = if_false,
-        },
-    });
-}
+const parseFuncStmt = binaryParser(
+    .left,
+    &.{ .right_arrow, .semicolon },
+    parseConditions,
+);
 
 /// the lowest precedence parser
-fn parseExpr(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-    const lowest_parser = parseFuncStmt;
-
-    const pk = try lexer.peek() orelse return null;
-    return switch (pk.tag) {
-        .let => try parseLet(ast, lexer),
-        .@"if" => try parseIf(ast, lexer),
-
-        else => try lowest_parser(ast, lexer),
-    };
-}
+const parseExpr = parseFuncStmt;
 
 /// a program is just a series of top level expressions
 fn parseProgram(ast: *Ast, lexer: *Lexer) ParseError!Ast.Node {
