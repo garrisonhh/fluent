@@ -77,3 +77,23 @@ pub fn add(
 pub fn get(src: Source) *const File {
     return map.get(src);
 }
+
+var test_source: ?Source = null;
+
+/// sometimes in tests you need to create an ast node but you don't have a
+/// source
+pub fn testLoc(ally: Allocator) Allocator.Error!Loc {
+    if (test_source == null) {
+        test_source = try add(
+            ally,
+            "virtual-test-source.fl",
+            "this is a virtual test source file",
+        );
+    }
+
+    return Loc{
+        .source = test_source.?,
+        .line_index = 0,
+        .char_index = 0,
+    };
+}

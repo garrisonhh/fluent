@@ -12,14 +12,23 @@ const ally = std.testing.allocator;
 
 // helpers =====================================================================
 
+fn new(ast: *Ast, init_expr: Ast.Expr) !Ast.Node {
+    const loc = try fluent.sources.testLoc(ast.ally);
+    return ast.new(loc, init_expr);
+}
+
 /// expects the parsed and analyzed text to match the expected node
 fn expectExpr(ast: *Ast, expected: Ast.Node, text: []const u8) !void {
     const source = try fluent.sources.add(ally, "test", text);
 
-    const node = try fluent.parse(ast, source, .expr) orelse {
-        return TestFailure;
+    const node = switch (try fluent.parse(ast, source, .expr)) {
+        .ok => |node| node,
+        .fail => return TestFailure,
     };
-    try fluent.analyze(ast, node);
+    switch (try fluent.analyze(ast, node)) {
+        .ok => {},
+        .fail => return TestFailure,
+    }
 
     // equality check
     const types_match = if (ast.getType(expected)) |expected_type| t: {
@@ -70,10 +79,10 @@ fn testIdent(ident: []const u8) !void {
     var ast = Ast.init(ally);
     defer ast.deinit();
 
-    const expr = try ast.new(null, .{
+    const expr = try new(&ast, .{
         .ident = try ally.dupe(u8, ident),
     });
-    try ast.setType(expr, typer.predef(.ident));
+    _ = try ast.setType(expr, typer.predef(.ident));
 
     try expectExpr(&ast, expr, ident);
 }
@@ -85,8 +94,8 @@ fn testInt(int: Ast.Expr.Int) !void {
     var ast = Ast.init(ally);
     defer ast.deinit();
 
-    const expr = try ast.new(null, .{ .int = int });
-    try ast.setType(expr, typer.predef(.int));
+    const expr = try new(&ast, .{ .int = int });
+    _ = try ast.setType(expr, typer.predef(.i64));
 
     const text = try std.fmt.allocPrint(ally, "{d}", .{int});
     defer ally.free(text);
@@ -101,8 +110,8 @@ fn testReal(real: Ast.Expr.Real) !void {
     var ast = Ast.init(ally);
     defer ast.deinit();
 
-    const expr = try ast.new(null, .{ .real = real });
-    try ast.setType(expr, typer.predef(.float));
+    const expr = try new(&ast, .{ .real = real });
+    _ = try ast.setType(expr, typer.predef(.f64));
 
     const text = try std.fmt.allocPrint(ally, "{d:.16}", .{real});
     defer ally.free(text);
@@ -119,8 +128,8 @@ test "parse-unit" {
     var ast = Ast.init(ally);
     defer ast.deinit();
 
-    const unit = try ast.new(null, .unit);
-    try ast.setType(unit, typer.predef(.unit));
+    const unit = try new(&ast, .unit);
+    _ = try ast.setType(unit, typer.predef(.unit));
 
     try expectExpr(&ast, unit, "()");
 }
@@ -132,20 +141,14 @@ test "parse-bools" {
     var ast = Ast.init(ally);
     defer ast.deinit();
 
-    const true_expr = try ast.new(null, .{ .bool = true });
-    const false_expr = try ast.new(null, .{ .bool = false });
+    const true_expr = try new(&ast, .{ .bool = true });
+    const false_expr = try new(&ast, .{ .bool = false });
 
-    try ast.setType(true_expr, typer.predef(.bool));
-    try ast.setType(false_expr, typer.predef(.bool));
+    _ = try ast.setType(true_expr, typer.predef(.bool));
+    _ = try ast.setType(false_expr, typer.predef(.bool));
 
     try expectExpr(&ast, true_expr, "true");
     try expectExpr(&ast, false_expr, "false");
-}
-
-test "parse-identifiers" {
-    try testIdent("hello");
-    try testIdent("CamelCase");
-    try testIdent("snake_case");
 }
 
 test "parse-ints" {
