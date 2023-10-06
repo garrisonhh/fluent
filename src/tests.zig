@@ -110,7 +110,7 @@ fn testReal(real: Ast.Expr.Real) !void {
     try expectExpr(&ast, expr, text);
 }
 
-// tests =======================================================================
+// parsing =====================================================================
 
 test "parse-unit" {
     try fluent.init(ally);

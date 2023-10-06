@@ -142,6 +142,17 @@ fn analyzeUnary(
     @panic("TODO analyze unary op");
 }
 
+/// TODO remove this and do it correctly once I can eval types
+fn dirtyEvilHackAnalyzePredefType(
+    ast: *Ast,
+    node: Ast.Node,
+) Allocator.Error!Type.Id {
+    const typename = ast.get(node).ident;
+    const predef = std.meta.stringToEnum(typer.PredefinedType, typename).?;
+    const t = typer.predef(predef);
+    return try ast.setType(node, t);
+}
+
 /// dirty evil hack to get function parameter sema working
 /// TODO remove this and do it correctly once I can eval types
 fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
@@ -153,12 +164,11 @@ fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     const record_entries = ast.get(node).record;
     for (record_entries) |entry| {
         const name = ast.get(entry.key).ident;
-        const typename = ast.get(entry.value).ident;
-        const predef = std.meta.stringToEnum(typer.PredefinedType, typename).?;
+        const t = try dirtyEvilHackAnalyzePredefType(ast, entry.value);
 
         try divs.append(.{
             .name = try ally.dupe(u8, name),
-            .type = typer.predef(predef),
+            .type = t,
         });
     }
 
@@ -182,32 +192,12 @@ fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return try ast.setType(node, params_type);
 }
 
-fn analyzeFunc(
-    ast: *Ast,
-    node: Ast.Node,
-    params: Ast.Node,
-    body: Ast.Node
-) SemaError!Type.Id {
-    _ = node;
-
-    const params_type = try dirtyEvilHackAnalyzeFuncParams(ast, params);
-    const body_type = try analyzeExpr(ast, body);
-
-    // TODO function types
-    _ = params_type;
-    _ = body_type;
-
-    return typer.predef(.unit);
-}
-
 fn analyzeBinary(
     ast: *Ast,
     node: Ast.Node,
     meta: Ast.Expr.Binary,
 ) SemaError!Type.Id {
     return switch (meta.op) {
-        .function => try analyzeFunc(ast, node, meta.lhs, meta.rhs),
-
         // arithmetic
         .add,
         .subtract,
@@ -268,6 +258,25 @@ fn analyzeRecord(
     return typer.predef(.unit);
 }
 
+fn analyzeFn(
+    ast: *Ast,
+    node: Ast.Node,
+    meta: Ast.Expr.Fn,
+) SemaError!Type.Id {
+    _ = node;
+
+    const params_type = try dirtyEvilHackAnalyzeFuncParams(ast, meta.params);
+    const return_type = try dirtyEvilHackAnalyzePredefType(ast, meta.returns);
+    const body_type = try analyzeExpr(ast, meta.body);
+
+    // TODO function types
+    _ = params_type;
+    _ = return_type;
+    _ = body_type;
+
+    return typer.predef(.unit);
+}
+
 fn analyzeQuoted(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.predef(.unit)),
@@ -295,6 +304,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         .binary => |meta| try analyzeBinary(ast, node, meta),
         .record => |entries| try analyzeRecord(ast, node, entries),
         .call => |call| try analyzeCall(ast, node, call),
+        .@"fn" => |meta| try analyzeFn(ast, node, meta),
 
         .let => |let| let: {
             const let_type = try ast.setType(node, typer.predef(.unit));

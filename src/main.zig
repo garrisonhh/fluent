@@ -71,14 +71,17 @@ pub fn main() !void {
     defer fluent.deinit(ally);
 
     // test source
+    const fib =
+        \\let fib = fn {n: u64} u64 ->
+        \\  if n == 0 then 1
+        \\  else if n == 1 then 1
+        \\  else fib (n - 1) + fib (n - 2)
+        \\
+    ;
+    _ = fib;
+
     const text =
-        \\let fib = {n: u64} ->
-        \\  if n == 0 then
-        \\    1
-        \\  else if n == 1 then
-        \\    1
-        \\  else
-        \\    fib (n - 1) + fib (n - 2)
+        \\let f = fn {n: u64} u64 -> 2
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);

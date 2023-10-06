@@ -22,7 +22,6 @@ pub const UnaryOp = enum {
 
 pub const BinaryOp = enum {
     statement,
-    function,
     field_access,
 
     add,
@@ -62,6 +61,12 @@ pub const Expr = union(enum) {
         expr: Node,
     };
 
+    pub const Fn = struct {
+        params: Node,
+        returns: Node,
+        body: Node,
+    };
+
     pub const If = struct {
         cond: Node,
         if_true: Node,
@@ -81,6 +86,7 @@ pub const Expr = union(enum) {
     unary: Unary,
     binary: Binary,
     let: Let,
+    @"fn": Fn,
     @"if": If,
 
     fn deinit(self: Self, ally: Allocator) void {
@@ -93,6 +99,7 @@ pub const Expr = union(enum) {
             .unary,
             .binary,
             .let,
+            .@"fn",
             .@"if",
             => {},
 
@@ -200,6 +207,7 @@ fn exprDataEql(self: *const Ast, a: anytype, b: @TypeOf(a)) bool {
 
         Expr.Unary,
         Expr.Binary,
+        Expr.Fn,
         Expr.If,
         => |T| st: {
             inline for (@typeInfo(T).Struct.fields) |field| {

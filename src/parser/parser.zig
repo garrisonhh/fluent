@@ -325,7 +325,6 @@ fn unaryOpFromTokenTag(tag: Token.Tag) ?Ast.UnaryOp {
 fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
     return switch (tag) {
         .semicolon => .statement,
-        .right_arrow => .function,
         .dot => .field_access,
         .plus => .add,
         .minus => .subtract,
@@ -354,6 +353,34 @@ fn parseLet(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
         .let = .{
             .name = name,
             .expr = expr,
+        },
+    });
+}
+
+fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+    const inner_parser = parsePrefixedName;
+
+    const @"fn" = try expectToken(ast, lexer, .@"fn");
+
+    const params = try inner_parser(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "function parameters");
+    };
+
+    const returns = try inner_parser(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "function return type");
+    };
+
+    _ = try expectToken(ast, lexer, .right_arrow);
+
+    const body = try parseExpr(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "function body");
+    };
+
+    return try ast.new(@"fn".loc, .{
+        .@"fn" = .{
+            .params = params,
+            .returns = returns,
+            .body = body,
         },
     });
 }
@@ -392,6 +419,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     return switch (pk.tag) {
         // tokens with one possible result
         .let => try parseLet(ast, lexer),
+        .@"fn" => try parseFn(ast, lexer),
         .@"if" => try parseIf(ast, lexer),
 
         // atomic tokens

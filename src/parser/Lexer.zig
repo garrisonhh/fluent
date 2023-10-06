@@ -24,6 +24,7 @@ pub const Token = struct {
         false,
 
         let,
+        @"fn",
         @"if",
         then,
         @"else",
@@ -157,6 +158,7 @@ const Keyword = struct {
             "true",
             "false",
             "let",
+            "fn",
             "if",
             "then",
             "else",

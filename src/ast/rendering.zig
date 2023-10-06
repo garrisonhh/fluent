@@ -324,6 +324,7 @@ pub fn render(
         .binary,
         .program,
         .let,
+        .@"fn",
         .@"if",
         => |data| div: {
             const Data = @TypeOf(data);
