@@ -158,7 +158,7 @@ fn dirtyEvilHackAnalyzePredefType(
 fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     const ally = ast.ally;
 
-    var divs = std.ArrayList(Type.Field).init(ally);
+    var divs = std.ArrayList(Type.Named).init(ally);
     defer divs.deinit();
 
     const record_entries = ast.get(node).record;
@@ -175,19 +175,6 @@ fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     const params_type = try typer.put(ally, .{
         .@"struct" = .{ .fields = try divs.toOwnedSlice() },
     });
-
-    {
-        const stderr = std.io.getStdErr().writer();
-
-        var mason = blox.Mason.init(ally);
-        defer mason.deinit();
-
-        const div = typer.render(&mason, params_type) catch @panic("OOM");
-
-        stderr.print("[rec]\n", .{}) catch {};
-        mason.write(div, stderr, .{}) catch {};
-        stderr.print("\n", .{}) catch {};
-    }
 
     return try ast.setType(node, params_type);
 }
@@ -263,18 +250,25 @@ fn analyzeFn(
     node: Ast.Node,
     meta: Ast.Expr.Fn,
 ) SemaError!Type.Id {
-    _ = node;
+    const ally = ast.ally;
 
     const params_type = try dirtyEvilHackAnalyzeFuncParams(ast, meta.params);
     const return_type = try dirtyEvilHackAnalyzePredefType(ast, meta.returns);
     const body_type = try analyzeExpr(ast, meta.body);
 
-    // TODO function types
-    _ = params_type;
-    _ = return_type;
-    _ = body_type;
+    _ = body_type; // TODO constrain this node with the return type
 
-    return typer.predef(.unit);
+    // construct fn type
+    const param_fields = typer.get(params_type).@"struct".fields;
+
+    const func_type = try typer.put(ally, .{
+        .@"fn" = .{
+            .params = try Type.cloneNameds(ally, param_fields),
+            .returns = return_type,
+        },
+    });
+
+    return try ast.setType(node, func_type);
 }
 
 fn analyzeQuoted(ast: *Ast, node: Ast.Node) SemaError!Type.Id {

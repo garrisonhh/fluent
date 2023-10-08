@@ -6,6 +6,10 @@ const fluent = @import("mod.zig");
 const Ast = fluent.Ast;
 const typer = fluent.typer;
 
+comptime {
+    std.testing.refAllDeclsRecursive(@This());
+}
+
 const TestFailure = error.TestFailure;
 
 const ally = std.testing.allocator;

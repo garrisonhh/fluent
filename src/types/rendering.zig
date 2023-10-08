@@ -47,6 +47,30 @@ fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.Div {
             break :float try mason.newPre(str, .{ .fg = theme.t });
         },
 
+        .@"fn" => |f| f: {
+            const comma = try mason.newPre(", ", .{});
+
+            var divs = std.ArrayList(blox.Div).init(ally);
+            defer divs.deinit();
+
+            try divs.append(try mason.newPre("(", .{}));
+            for (f.params, 0..) |param, i| {
+                if (i > 0) try divs.append(comma);
+
+                const param_div = try mason.newBox(&.{
+                    try mason.newPre(param.name, .{ .fg = theme.field }),
+                    try mason.newPre(": ", .{}),
+                    try renderTypeId(mason, param.type),
+                }, span);
+
+                try divs.append(param_div);
+            }
+
+            try divs.append(try mason.newPre(") -> ", .{}));
+            try divs.append(try renderTypeId(mason, f.returns));
+
+            break :f try mason.newBox(divs.items, span);
+        },
         .@"struct" => |st| st: {
             var fields = std.ArrayList(blox.Div).init(ally);
             defer fields.deinit();

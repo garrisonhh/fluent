@@ -5,6 +5,8 @@ pub const Ast = @import("ast/Ast.zig");
 pub const Type = @import("types/type.zig").Type;
 pub const typer = @import("types/typer.zig");
 
+pub const env = @import("env/env.zig");
+
 pub const sources = @import("sources.zig");
 pub const Source = sources.Source;
 pub const Loc = sources.Loc;
@@ -52,10 +54,12 @@ pub fn init(ally: Allocator) Allocator.Error!void {
 
     // call init functions
     try typer.init(ally);
+    env.init();
 }
 
 pub fn deinit(ally: Allocator) void {
     sources.deinit(ally);
+    env.deinit(ally);
     typer.deinit(ally);
 }
 

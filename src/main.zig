@@ -81,7 +81,7 @@ pub fn main() !void {
     _ = fib;
 
     const text =
-        \\let f = fn {n: u64} u64 -> 2
+        \\fn {n: u64} u64 -> 0
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);

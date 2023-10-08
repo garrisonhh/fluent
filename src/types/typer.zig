@@ -50,7 +50,7 @@ fn autoHashType(
         },
 
         // hash slice of hashable
-        []const Type.Field => {
+        []const Type.Named => {
             for (x) |elem| {
                 autoHashType(@TypeOf(elem), elem, this, hasher);
             }
@@ -59,7 +59,8 @@ fn autoHashType(
         // hash struct fields
         Type.Int,
         Type.Float,
-        Type.Field,
+        Type.Named,
+        Type.Fn,
         Type.Struct,
         => {
             inline for (@typeInfo(T).Struct.fields) |field| {
@@ -90,6 +91,22 @@ fn autoEqlType(
         => a == b,
 
         []const u8 => std.mem.eql(u8, a, b),
+
+        Type.Named, Type.Fn, Type.Struct => eql: {
+            inline for (@typeInfo(T).Struct.fields) |field| {
+                const fields_eql = autoEqlType(
+                    field.type,
+                    @field(a, field.name),
+                    this_a,
+                    @field(b, field.name),
+                    this_b,
+                );
+
+                if (!fields_eql) break :eql false;
+            }
+
+            break :eql true;
+        },
 
         Type.Id => eql: {
             const a_is_this = a.eql(this_a);
@@ -218,6 +235,8 @@ pub const PredefinedType = enum {
 };
 
 /// a group of types cached on init
+/// TODO remove this and make a Constraint type that can be used for sema expr
+/// expectations
 pub const PredefinedClass = enum {
     const Self = @This();
 

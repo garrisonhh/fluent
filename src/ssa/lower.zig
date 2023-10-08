@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
 const ssa = fluent.ssa;
+const typer = fluent.typer;
 
 pub const Error = Allocator.Error;
 
@@ -37,12 +38,13 @@ fn lowerTopLevelExpr(
 /// lower an expr to its own block
 fn lowerBlockExpr(
     ast: *const Ast,
+    prog: *ssa.Program,
     func: *ssa.FuncBuilder,
     node: Ast.Node,
     phi: ?ssa.Local,
 ) Error!ssa.Block.Ref {
     var block = try func.block(phi);
-    const ret = try lowerExpr(ast, &block, node);
+    const ret = try lowerExpr(ast, prog, &block, node);
     try block.build(ret);
 
     return block.ref;
@@ -54,11 +56,15 @@ fn lowerFunction(
     params: Ast.Node,
     body: Ast.Node,
 ) Error!ssa.Func.Ref {
-    // TODO
-    _ = params;
-
     var func = try prog.func();
-    const entry = try lowerBlockExpr(ast, &func, body, null);
+
+    const params_type = ast.getType(params).?;
+    const param_types = typer.get(params_type).@"struct".fields;
+    for (param_types) |entry| {
+        _ = try func.param(entry.type);
+    }
+
+    const entry = try lowerBlockExpr(ast, prog, &func, body, null);
     try func.build(entry);
 
     return func.ref;
@@ -66,6 +72,7 @@ fn lowerFunction(
 
 fn lowerExpr(
     ast: *const Ast,
+    prog: *ssa.Program,
     block: *ssa.BlockBuilder,
     node: Ast.Node,
 ) Error!ssa.Local {
@@ -88,8 +95,8 @@ fn lowerExpr(
 
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
-                try lowerExpr(ast, block, bin.lhs),
-                try lowerExpr(ast, block, bin.rhs),
+                try lowerExpr(ast, prog, block, bin.lhs),
+                try lowerExpr(ast, prog, block, bin.rhs),
             };
 
             const data: ssa.Opcode = switch (bin.op) {
@@ -106,20 +113,32 @@ fn lowerExpr(
         },
 
         .@"if" => |@"if"| @"if": {
-            const cond = try lowerExpr(ast, block, @"if".cond);
-            const if_t = try lowerBlockExpr(ast, func, @"if".if_true, cond);
-            const if_f = try lowerBlockExpr(ast, func, @"if".if_false, cond);
+            const cond = try lowerExpr(ast, prog, block, @"if".cond);
+            const if_true =
+                try lowerBlockExpr(ast, prog, func, @"if".if_true, cond);
+            const if_false =
+                try lowerBlockExpr(ast, prog, func, @"if".if_false, cond);
 
             break :@"if" try block.op(t, .{
                 .branch = .{
                     .cond = cond,
-                    .if_true = if_t,
-                    .if_false = if_f,
+                    .if_true = if_true,
+                    .if_false = if_false,
                 },
             });
         },
+        .@"fn" => |@"fn"| @"fn": {
+            const func_ref =
+                try lowerFunction(ast, prog, @"fn".params, @"fn".body);
 
-        else => @panic("TODO"),
+            break :@"fn" try block.op(t, .{
+                .constant = try func.constant(.{ .func_ref = func_ref }),
+            });
+        },
+
+        else => |tag| {
+            std.debug.panic("TODO lower {s} exprs", .{@tagName(tag)});
+        },
     };
 }
 
@@ -134,7 +153,7 @@ pub fn lower(
 
     const entry = switch (ast.get(node).*) {
         .program => @panic("TODO lower program"),
-        else => try lowerBlockExpr(ast, &func, node, null),
+        else => try lowerBlockExpr(ast, program, &func, node, null),
     };
 
     try func.build(entry);

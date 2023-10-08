@@ -18,6 +18,7 @@ pub const Constant = union(enum) {
     bool: bool,
     uint: u64,
     float: f64,
+    func_ref: Func.Ref,
 };
 
 pub const Opcode = union(enum) {
@@ -202,7 +203,7 @@ pub const FuncBuilder = struct {
     /// add a parameter to the function
     pub fn param(self: *Self, t: Type.Id) Allocator.Error!Local {
         const p = try self.local(t);
-        try self.params.append(p);
+        try self.params.append(self.ally, p);
         return p;
     }
 

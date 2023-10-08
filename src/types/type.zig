@@ -31,13 +31,21 @@ pub const Type = union(enum) {
         bits: Bits,
     };
 
-    pub const Field = struct {
+    pub const Named = struct {
         name: []const u8,
         type: Id,
     };
 
+    pub const Fn = struct {
+        // TODO these shouldn't be named in the type, that's a scope thing
+        params: []const Named,
+        returns: Type.Id,
+    };
+
     pub const Struct = struct {
-        fields: []const Field,
+        // TODO should these be named in the type? maybe would be better to
+        // make that a scoping responsibility
+        fields: []const Named,
     };
 
     unit,
@@ -46,7 +54,13 @@ pub const Type = union(enum) {
     bool,
     int: Int,
     float: Float,
+    @"fn": Fn,
     @"struct": Struct,
+
+    fn freeNameds(ally: Allocator, nameds: []const Named) void {
+        for (nameds) |named| ally.free(named.name);
+        ally.free(nameds);
+    }
 
     pub fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
@@ -58,11 +72,28 @@ pub const Type = union(enum) {
             .float,
             => {},
 
+            .@"fn" => |f| {
+                freeNameds(ally, f.params);
+            },
             .@"struct" => |st| {
-                for (st.fields) |field| ally.free(field.name);
-                ally.free(st.fields);
+                freeNameds(ally, st.fields);
             },
         }
+    }
+
+    pub fn cloneNameds(
+        ally: Allocator,
+        nameds: []const Named,
+    ) Allocator.Error![]const Named {
+        const owned = try ally.alloc(Named, nameds.len);
+        for (owned, nameds) |*slot, named| {
+            slot.* = .{
+                .name = try ally.dupe(u8, named.name),
+                .type = named.type,
+            };
+        }
+
+        return owned;
     }
 
     pub fn clone(self: Self, ally: Allocator) Allocator.Error!Self {
@@ -76,11 +107,11 @@ pub const Type = union(enum) {
             .float,
             => {},
 
+            .@"fn" => |*f| {
+                f.params = try cloneNameds(ally, f.params);
+            },
             .@"struct" => |*st| {
-                st.fields = try ally.dupe(Type.Field, st.fields);
-                for (st.fields) |*field| {
-                    field.name = try ally.dupe(u8, field.name);
-                }
+                st.fields = try cloneNameds(ally, st.fields);
             },
         }
 

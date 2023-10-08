@@ -30,6 +30,7 @@ fn renderConstant(
         .unit => try allocPrint(ally, "()", .{}),
         .bool => |b| try allocPrint(ally, "{}", .{b}),
         inline .uint, .float => |n| try allocPrint(ally, "{d}", .{n}),
+        .func_ref => |ref| try allocPrint(ally, "{func}", .{ref}),
     };
     defer ally.free(text);
 
