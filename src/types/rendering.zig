@@ -56,14 +56,7 @@ fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.Div {
             try divs.append(try mason.newPre("(", .{}));
             for (f.params, 0..) |param, i| {
                 if (i > 0) try divs.append(comma);
-
-                const param_div = try mason.newBox(&.{
-                    try mason.newPre(param.name, .{ .fg = theme.field }),
-                    try mason.newPre(": ", .{}),
-                    try renderTypeId(mason, param.type),
-                }, span);
-
-                try divs.append(param_div);
+                try divs.append(try renderTypeId(mason, param));
             }
 
             try divs.append(try mason.newPre(") -> ", .{}));
@@ -72,46 +65,30 @@ fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.Div {
             break :f try mason.newBox(divs.items, span);
         },
         .@"struct" => |st| st: {
-            var fields = std.ArrayList(blox.Div).init(ally);
-            defer fields.deinit();
+            const comma = try mason.newPre(", ", .{});
 
-            for (st.fields) |field| {
-                const field_name = try mason.newBox(&.{
-                    try mason.newPre(field.name, .{ .fg = theme.field }),
-                    try mason.newPre(": ", .{}),
-                }, span);
+            var divs = std.ArrayList(blox.Div).init(ally);
+            defer divs.deinit();
 
+            try divs.append(try mason.newPre("struct", .{ .fg = theme.t }));
+            try divs.append(try mason.newPre("(", .{}));
+
+            for (st.fields, 0..) |field, i| {
                 const field_type = ft: {
-                    if (field.type.eql(this)) {
+                    if (field.eql(this)) {
                         break :ft try mason.newPre("self", .{ .fg = theme.t });
                     } else {
-                        break :ft try renderTypeId(mason, field.type);
+                        break :ft try renderTypeId(mason, field);
                     }
                 };
 
-                if (mason.getSize(field_type)[1] <= 1) {
-                    try fields.append(try mason.newBox(&.{
-                        field_name,
-                        field_type,
-                    }, span));
-                } else {
-                    try fields.append(try mason.newBox(&.{
-                        field_name,
-                        try mason.newBox(&.{
-                            try mason.newSpacer(2, 0, .{}),
-                            field_type,
-                        }, span),
-                    }, .{}));
-                }
+                if (i > 0) try divs.append(comma);
+                try divs.append(field_type);
             }
 
-            break :st try mason.newBox(&.{
-                try mason.newPre("struct", .{ .fg = theme.t }),
-                try mason.newBox(&.{
-                    try mason.newSpacer(2, 0, .{}),
-                    try mason.newBox(fields.items, .{}),
-                }, span),
-            }, .{});
+            try divs.append(try mason.newPre(")", .{}));
+
+            break :st try mason.newBox(divs.items, span);
         },
     };
 }

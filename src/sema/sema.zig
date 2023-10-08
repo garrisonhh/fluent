@@ -147,10 +147,11 @@ fn dirtyEvilHackAnalyzePredefType(
     ast: *Ast,
     node: Ast.Node,
 ) Allocator.Error!Type.Id {
+    _ = try ast.setType(node, typer.predef(.type));
+
     const typename = ast.get(node).ident;
     const predef = std.meta.stringToEnum(typer.PredefinedType, typename).?;
-    const t = typer.predef(predef);
-    return try ast.setType(node, t);
+    return typer.predef(predef);
 }
 
 /// dirty evil hack to get function parameter sema working
@@ -158,22 +159,20 @@ fn dirtyEvilHackAnalyzePredefType(
 fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     const ally = ast.ally;
 
-    var divs = std.ArrayList(Type.Named).init(ally);
-    defer divs.deinit();
+    var params = std.ArrayList(Type.Id).init(ally);
+    defer params.deinit();
 
     const record_entries = ast.get(node).record;
     for (record_entries) |entry| {
         const name = ast.get(entry.key).ident;
-        const t = try dirtyEvilHackAnalyzePredefType(ast, entry.value);
+        _ = name; // TODO store struct field names in env
 
-        try divs.append(.{
-            .name = try ally.dupe(u8, name),
-            .type = t,
-        });
+        const param = try dirtyEvilHackAnalyzePredefType(ast, entry.value);
+        try params.append(param);
     }
 
     const params_type = try typer.put(ally, .{
-        .@"struct" = .{ .fields = try divs.toOwnedSlice() },
+        .@"struct" = .{ .fields = try params.toOwnedSlice() },
     });
 
     return try ast.setType(node, params_type);
@@ -263,7 +262,7 @@ fn analyzeFn(
 
     const func_type = try typer.put(ally, .{
         .@"fn" = .{
-            .params = try Type.cloneNameds(ally, param_fields),
+            .params = try ally.dupe(Type.Id, param_fields),
             .returns = return_type,
         },
     });

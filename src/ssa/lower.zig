@@ -60,8 +60,8 @@ fn lowerFunction(
 
     const params_type = ast.getType(params).?;
     const param_types = typer.get(params_type).@"struct".fields;
-    for (param_types) |entry| {
-        _ = try func.param(entry.type);
+    for (param_types) |param_type| {
+        _ = try func.param(param_type);
     }
 
     const entry = try lowerBlockExpr(ast, prog, &func, body, null);

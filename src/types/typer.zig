@@ -50,7 +50,7 @@ fn autoHashType(
         },
 
         // hash slice of hashable
-        []const Type.Named => {
+        []const Type.Id => {
             for (x) |elem| {
                 autoHashType(@TypeOf(elem), elem, this, hasher);
             }
@@ -59,7 +59,6 @@ fn autoHashType(
         // hash struct fields
         Type.Int,
         Type.Float,
-        Type.Named,
         Type.Fn,
         Type.Struct,
         => {
@@ -85,14 +84,36 @@ fn autoEqlType(
     this_b: Type.Id,
 ) bool {
     return switch (T) {
+        // trivial equalities
         Type.Int.Signedness,
         Type.Int.Bits,
         Type.Float.Bits,
         => a == b,
-
         []const u8 => std.mem.eql(u8, a, b),
 
-        Type.Named, Type.Fn, Type.Struct => eql: {
+        // slice of autoEql-able
+        []const Type.Id => eql: {
+            if (a.len != b.len) {
+                break :eql false;
+            }
+
+            for (a, b) |elem_a, elem_b| {
+                const elems_eql = autoEqlType(
+                    @TypeOf(elem_a, elem_b),
+                    elem_a,
+                    this_a,
+                    elem_b,
+                    this_b,
+                );
+
+                if (!elems_eql) break :eql false;
+            }
+
+            break :eql true;
+        },
+
+        // structs of hashable
+        Type.Fn, Type.Struct => eql: {
             inline for (@typeInfo(T).Struct.fields) |field| {
                 const fields_eql = autoEqlType(
                     field.type,
