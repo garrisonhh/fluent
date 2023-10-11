@@ -6,6 +6,7 @@ const fluent = @import("../mod.zig");
 const Type = fluent.Type;
 const idents = @import("idents.zig");
 const names = @import("names.zig");
+const rendering = @import("rendering.zig");
 
 pub const Ident = idents.Ident;
 pub const Name = names.Name;
@@ -59,9 +60,9 @@ pub const Def = union(enum) {
     }
 };
 
-const ScopeMap = com.RefList(Name, Def);
+const DefMap = com.RefList(Name, Def);
 
-var scopes: ScopeMap = .{};
+var defs: DefMap = .{};
 
 pub fn init() void {
     idents.init();
@@ -69,15 +70,15 @@ pub fn init() void {
 }
 
 pub fn deinit(ally: Allocator) void {
-    var scope_iter = scopes.iterator();
+    var scope_iter = defs.iterator();
     while (scope_iter.next()) |scope| scope.deinit(ally);
-    scopes.deinit(ally);
+    defs.deinit(ally);
 
     names.deinit(ally);
     idents.deinit(ally);
 
     if (builtin.is_test) {
-        scopes = .{};
+        defs = .{};
     }
 }
 
@@ -85,8 +86,8 @@ pub fn deinit(ally: Allocator) void {
 ///
 /// *def ownership is moved to the env*
 pub fn add(ally: Allocator, n: Name, def: Def) Allocator.Error!*Def {
-    try scopes.put(ally, n, def);
-    return scopes.get(n);
+    try defs.put(ally, n, def);
+    return defs.get(n);
 }
 
 pub fn get(n: Name) ?*const Def {
@@ -94,7 +95,7 @@ pub fn get(n: Name) ?*const Def {
 }
 
 pub fn getMut(n: Name) ?*Def {
-    return scopes.getOpt(n);
+    return defs.getOpt(n);
 }
 
 // ident/name behavior =========================================================
@@ -112,3 +113,6 @@ pub const nameSlice = names.slice;
 pub const namePush = names.push;
 /// drop an ident from a name (get the parent)
 pub const nameDrop = names.drop;
+
+pub const renderIdent = rendering.renderIdent;
+pub const renderName = rendering.renderName;

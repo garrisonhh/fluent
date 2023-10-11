@@ -14,7 +14,7 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var ast = fluent.Ast.init(ally);
     defer ast.deinit();
 
-    const root = switch (try fluent.parse(&ast, source, .expr)) {
+    const root = switch (try fluent.parse(&ast, source)) {
         .ok => |node| node,
         .fail => {
             for (ast.getErrors()) |err| {
@@ -71,17 +71,9 @@ pub fn main() !void {
     defer fluent.deinit(ally);
 
     // test source
-    const fib =
-        \\let fib = fn {n: u64} u64 ->
-        \\  if n == 0 then 1
-        \\  else if n == 1 then 1
-        \\  else fib (n - 1) + fib (n - 2)
-        \\
-    ;
-    _ = fib;
-
     const text =
-        \\fn {n: u64} u64 -> 0
+        \\fn useless {n: u64} u64 ->
+        \\  0
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);

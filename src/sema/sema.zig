@@ -149,8 +149,9 @@ fn dirtyEvilHackAnalyzePredefType(
 ) Allocator.Error!Type.Id {
     _ = try ast.setType(node, typer.predef(.type));
 
-    const typename = ast.get(node).ident;
-    const predef = std.meta.stringToEnum(typer.PredefinedType, typename).?;
+    const type_ident = ast.get(node).ident;
+    const type_name_str = fluent.env.identStr(type_ident);
+    const predef = std.meta.stringToEnum(typer.PredefinedType, type_name_str).?;
     return typer.predef(predef);
 }
 
@@ -299,14 +300,6 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         .call => |call| try analyzeCall(ast, node, call),
         .@"fn" => |meta| try analyzeFn(ast, node, meta),
 
-        .let => |let| let: {
-            const let_type = try ast.setType(node, typer.predef(.unit));
-
-            try expectQuoted(ast, let.name, typer.predef(.ident));
-            _ = try analyzeExpr(ast, let.expr);
-
-            break :let let_type;
-        },
         .@"if" => |@"if"| @"if": {
             _ = try expect(ast, @"if".cond, typer.predef(.bool));
             _ = try analyzeExpr(ast, @"if".if_true);

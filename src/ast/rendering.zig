@@ -297,10 +297,7 @@ pub fn render(
             space,
             try mason.newPre("()", .{ .fg = theme.data }),
         }, span),
-        .ident => |ident| ident: {
-            const data = try mason.newPre(ident, .{});
-            break :ident try mason.newBox(&.{ label, space, data }, span);
-        },
+        .ident => |ident| try fluent.env.renderIdent(mason, ident),
 
         .bool => |b| b: {
             const str = if (b) "true" else "false";
@@ -323,7 +320,6 @@ pub fn render(
         .unary,
         .binary,
         .program,
-        .let,
         .@"fn",
         .@"if",
         => |data| div: {

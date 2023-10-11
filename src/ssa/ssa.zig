@@ -4,6 +4,7 @@ const com = @import("common");
 const rendering = @import("rendering.zig");
 const fluent = @import("../mod.zig");
 const Type = fluent.Type;
+const Name = fluent.env.Name;
 
 pub const Local = com.Ref(.ssa_local, 32);
 pub const LocalList = com.RefList(Local, Type.Id);
@@ -91,15 +92,14 @@ pub const Func = struct {
     pub const Ref = com.Ref(.ssa_func, 32);
     pub const RefList = com.RefList(Ref, Self);
 
-    params: []const Local,
-    returns: Type.Id,
+    name: Name,
+    type: Type.Id,
     entry: Block.Ref,
     constants: Constant.RefList,
     locals: LocalList,
     blocks: Block.RefList,
 
     pub fn deinit(self: *Self, ally: Allocator) void {
-        ally.free(self.params);
         self.constants.deinit(ally);
         self.locals.deinit(ally);
 
@@ -114,6 +114,7 @@ pub const Program = struct {
     const Self = @This();
 
     ally: Allocator,
+    exports: std.AutoHashMapUnmanaged(Name, Func.Ref) = .{},
     funcs: Func.RefList = .{},
 
     pub fn init(ally: Allocator) Self {
@@ -123,6 +124,8 @@ pub const Program = struct {
     pub fn deinit(self: *Self) void {
         const ally = self.ally;
 
+        self.exports.deinit(ally);
+
         var func_iter = self.funcs.iterator();
         while (func_iter.next()) |f| f.deinit(ally);
         self.funcs.deinit(ally);
@@ -131,13 +134,17 @@ pub const Program = struct {
     pub const RenderError = rendering.RenderError;
     pub const render = rendering.renderProgram;
 
-    pub fn func(self: *Self) Allocator.Error!FuncBuilder {
+    pub fn func(self: *Self, name: Name) Allocator.Error!FuncBuilder {
         const ally = self.ally;
+        const ref = try self.funcs.new(ally);
+
+        try self.exports.put(ally, name, ref);
 
         return FuncBuilder{
             .ally = ally,
+            .name = name,
             .program = self,
-            .ref = try self.funcs.new(ally),
+            .ref = ref,
         };
     }
 };
@@ -180,6 +187,7 @@ pub const FuncBuilder = struct {
     ally: Allocator,
     program: *Program,
     ref: Func.Ref,
+    name: Name,
     params: std.ArrayListUnmanaged(Local) = .{},
     constants: Constant.RefList = .{},
     locals: LocalList = .{},
@@ -187,12 +195,31 @@ pub const FuncBuilder = struct {
 
     /// finalize this function
     pub fn build(self: *Self, entry: Block.Ref) Allocator.Error!void {
+        const ally = self.ally;
+        defer self.params.deinit(ally);
+
         const entry_block = self.blocks.get(entry);
+
+        // generate type
+        var params = try ally.alloc(Type.Id, self.params.items.len);
+        errdefer ally.free(params);
+
+        for (params, self.params.items) |*slot, param_local| {
+            slot.* = self.locals.get(param_local).*;
+        }
+
         const returns = self.locals.get(entry_block.ret).*;
 
+        const func_type = try fluent.typer.put(ally, .{
+            .@"fn" = .{
+                .params = params,
+                .returns = returns,
+            },
+        });
+
         self.program.funcs.set(self.ref, Func{
-            .params = try self.params.toOwnedSlice(self.ally),
-            .returns = returns,
+            .name = self.name,
+            .type = func_type,
             .entry = entry,
             .constants = self.constants,
             .locals = self.locals,

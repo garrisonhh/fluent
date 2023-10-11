@@ -20,7 +20,7 @@ fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.Div {
     return switch (t) {
         inline .unit,
         .type,
-        .ident,
+        .name,
         .bool,
         => |_, tag| try mason.newPre(@tagName(tag), .{ .fg = theme.t }),
 

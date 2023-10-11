@@ -42,7 +42,7 @@ pub const Type = union(enum) {
 
     unit,
     type,
-    ident,
+    name,
     bool,
     int: Int,
     float: Float,
@@ -53,7 +53,7 @@ pub const Type = union(enum) {
         switch (self) {
             .unit,
             .type,
-            .ident,
+            .name,
             .bool,
             .int,
             .float,
@@ -73,7 +73,7 @@ pub const Type = union(enum) {
         switch (owned) {
             .unit,
             .type,
-            .ident,
+            .name,
             .bool,
             .int,
             .float,

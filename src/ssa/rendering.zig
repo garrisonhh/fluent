@@ -20,6 +20,7 @@ const theme = struct {
 
 fn renderConstant(
     mason: *blox.Mason,
+    prog: *const ssa.Program,
     func: *const ssa.Func,
     constant: ssa.Constant.Ref,
 ) RenderError!blox.Div {
@@ -30,7 +31,9 @@ fn renderConstant(
         .unit => try allocPrint(ally, "()", .{}),
         .bool => |b| try allocPrint(ally, "{}", .{b}),
         inline .uint, .float => |n| try allocPrint(ally, "{d}", .{n}),
-        .func_ref => |ref| try allocPrint(ally, "{func}", .{ref}),
+        .func_ref => |ref| {
+            return try renderFuncName(mason, prog, ref);
+        },
     };
     defer ally.free(text);
 
@@ -57,14 +60,18 @@ fn renderBlockRef(mason: *blox.Mason, ref: ssa.Block.Ref) RenderError!blox.Div {
     return try mason.newPre(text, .{ .fg = theme.meta });
 }
 
-fn renderFuncRef(mason: *blox.Mason, ref: ssa.Func.Ref) RenderError!blox.Div {
-    var buf: [64]u8 = undefined;
-    const text = try std.fmt.bufPrint(&buf, "{func}", .{ref});
-    return try mason.newPre(text, .{ .fg = theme.meta });
+fn renderFuncName(
+    mason: *blox.Mason,
+    prog: *const ssa.Program,
+    ref: ssa.Func.Ref,
+) RenderError!blox.Div {
+    const name = prog.funcs.get(ref).name;
+    return try fluent.env.renderName(mason, name);
 }
 
 fn renderOp(
     mason: *blox.Mason,
+    prog: *const ssa.Program,
     func: *const ssa.Func,
     op: ssa.Op,
 ) RenderError!blox.Div {
@@ -75,7 +82,7 @@ fn renderOp(
     const code_tag = try mason.newPre(code_text, .{ .fg = theme.opcode });
 
     const code = switch (op.code) {
-        .constant => |c| try renderConstant(mason, func, c),
+        .constant => |c| try renderConstant(mason, prog, func, c),
 
         .branch => |br| try mason.newBox(&.{
             code_tag,
@@ -92,7 +99,7 @@ fn renderOp(
 
             try divs.appendSlice(&.{
                 code_tag,
-                try renderFuncRef(mason, call.func),
+                try renderFuncName(mason, prog, call.func),
             });
 
             for (call.args, 0..) |arg, i| {
@@ -126,6 +133,7 @@ fn renderOp(
 
 fn renderBlock(
     mason: *blox.Mason,
+    prog: *const ssa.Program,
     func: *const ssa.Func,
     ref: ssa.Block.Ref,
 ) RenderError!blox.Div {
@@ -143,7 +151,7 @@ fn renderBlock(
     }
 
     for (block.ops) |op| {
-        const div = try renderOp(mason, func, op);
+        const div = try renderOp(mason, prog, func, op);
         try divs.append(div);
     }
 
@@ -184,17 +192,20 @@ fn renderFunc(
 
     var blocks = func.blocks.iterator();
     while (blocks.nextEntry()) |entry| {
-        const div = try renderBlock(mason, func, entry.ref);
+        const div = try renderBlock(mason, prog, func, entry.ref);
         try block_divs.append(div);
     }
 
-    // stack it
-    var buf: [64]u8 = undefined;
-    const text = try std.fmt.bufPrint(&buf, "{func}", .{ref});
+    const label = try mason.newBox(&.{
+        try mason.newPre("fn", .{ .fg = theme.meta }),
+        try mason.newSpacer(1, 1, .{}),
+        try renderFuncName(mason, prog, ref),
+        try mason.newPre(" <", .{}),
+        try fluent.typer.render(mason, func.type),
+        try mason.newPre(">", .{}),
+    }, span);
 
-    const label = try mason.newPre(text, .{ .fg = theme.meta });
     const indent = try mason.newSpacer(2, 0, .{});
-
     return try mason.newBox(&.{
         label,
         try mason.newBox(&.{

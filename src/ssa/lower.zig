@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
+const env = fluent.env;
 const ssa = fluent.ssa;
 const typer = fluent.typer;
 
@@ -53,10 +54,11 @@ fn lowerBlockExpr(
 fn lowerFunction(
     ast: *const Ast,
     prog: *ssa.Program,
+    name: env.Name,
     params: Ast.Node,
     body: Ast.Node,
 ) Error!ssa.Func.Ref {
-    var func = try prog.func();
+    var func = try prog.func(name);
 
     const params_type = ast.getType(params).?;
     const param_types = typer.get(params_type).@"struct".fields;
@@ -127,14 +129,6 @@ fn lowerExpr(
                 },
             });
         },
-        .@"fn" => |@"fn"| @"fn": {
-            const func_ref =
-                try lowerFunction(ast, prog, @"fn".params, @"fn".body);
-
-            break :@"fn" try block.op(t, .{
-                .constant = try func.constant(.{ .func_ref = func_ref }),
-            });
-        },
 
         else => |tag| {
             std.debug.panic("TODO lower {s} exprs", .{@tagName(tag)});
@@ -147,15 +141,30 @@ fn lowerExpr(
 pub fn lower(
     ast: *const Ast,
     program: *ssa.Program,
-    node: Ast.Node,
-) Error!ssa.Func.Ref {
-    var func = try program.func();
+    prog_node: Ast.Node,
+) Error!void {
+    const prog_expr = ast.get(prog_node);
+    std.debug.assert(prog_expr.* == .program);
 
-    const entry = switch (ast.get(node).*) {
-        .program => @panic("TODO lower program"),
-        else => try lowerBlockExpr(ast, program, &func, node, null),
-    };
+    for (prog_expr.program) |decl| {
+        switch (ast.get(decl).*) {
+            .@"fn" => |@"fn"| {
+                // TODO eval this; this is a dirty evil hack
+                const name_ident = ast.get(@"fn".name).ident;
+                const name = try fluent.env.name(ast.ally, &.{name_ident});
 
-    try func.build(entry);
-    return func.ref;
+                _ = try lowerFunction(
+                    ast,
+                    program,
+                    name,
+                    @"fn".params,
+                    @"fn".body,
+                );
+            },
+
+            else => |tag| {
+                std.debug.panic("TODO lower {s} decls", .{@tagName(tag)});
+            },
+        }
+    }
 }

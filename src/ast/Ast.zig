@@ -9,6 +9,7 @@ const rendering = @import("rendering.zig");
 const fluent = @import("../mod.zig");
 const Loc = fluent.Loc;
 const Type = fluent.Type;
+const Ident = fluent.env.Ident;
 
 pub const Error = @import("error.zig").Error;
 
@@ -56,12 +57,8 @@ pub const Expr = union(enum) {
         value: Node,
     };
 
-    pub const Let = struct {
-        name: Node,
-        expr: Node,
-    };
-
     pub const Fn = struct {
+        name: Node,
         params: Node,
         returns: Node,
         body: Node,
@@ -75,7 +72,7 @@ pub const Expr = union(enum) {
 
     unit,
     bool: bool,
-    ident: []const u8,
+    ident: Ident,
     int: Int,
     real: Real,
 
@@ -85,7 +82,6 @@ pub const Expr = union(enum) {
     program: []const Node,
     unary: Unary,
     binary: Binary,
-    let: Let,
     @"fn": Fn,
     @"if": If,
 
@@ -93,18 +89,17 @@ pub const Expr = union(enum) {
         switch (self) {
             .unit,
             .bool,
+            .ident,
             .int,
             .real,
             .parens,
             .unary,
             .binary,
-            .let,
             .@"fn",
             .@"if",
             => {},
 
-            inline .ident,
-            .record,
+            inline .record,
             .call,
             .program,
             => |slice| ally.free(slice),
@@ -188,8 +183,7 @@ fn exprDataEql(self: *const Ast, a: anytype, b: @TypeOf(a)) bool {
 
         bool, Expr.Int, Expr.Real => a == b,
 
-        []const u8 => std.mem.eql(u8, a, b),
-        Node => self.eql(a, b),
+        Ident, Node => self.eql(a, b),
 
         []const Node => arr: {
             if (a.len != b.len) {

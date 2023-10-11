@@ -6,6 +6,8 @@ const builtin = @import("builtin");
 const com = @import("common");
 const rendering = @import("rendering.zig");
 const Type = @import("type.zig").Type;
+const fluent = @import("../mod.zig");
+const env = fluent.env;
 
 /// recursively hashes Type with awareness of self referencing
 fn autoHashType(
@@ -17,8 +19,6 @@ fn autoHashType(
     const b = std.mem.asBytes;
 
     switch (T) {
-        []const u8 => hasher.update(x),
-
         Type => {
             hasher.update(b(&@as(Type.Tag, x)));
 
@@ -42,6 +42,8 @@ fn autoHashType(
 
         // hash value directly
         void,
+        env.Ident,
+        env.Name,
         Type.Int.Signedness,
         Type.Int.Bits,
         Type.Float.Bits,
@@ -76,6 +78,7 @@ fn autoHashType(
 }
 
 /// recursively checks Type for equality with awareness of self referencing
+
 fn autoEqlType(
     comptime T: type,
     a: T,
@@ -199,7 +202,7 @@ pub const PredefinedType = enum {
 
     unit,
     type,
-    ident,
+    name,
     bool,
     u8,
     u16,
@@ -217,7 +220,7 @@ pub const PredefinedType = enum {
         return switch (self) {
             inline .unit,
             .type,
-            .ident,
+            .name,
             .bool,
             => |tag| @unionInit(Type, @tagName(tag), {}),
             .f32 => .{ .float = .{ .bits = .@"32" } },

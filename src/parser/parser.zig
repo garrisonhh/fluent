@@ -4,6 +4,7 @@ const blox = @import("blox");
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
 const Loc = fluent.Loc;
+const env = fluent.env;
 const Lexer = @import("Lexer.zig");
 const Token = Lexer.Token;
 const literals = @import("literals.zig");
@@ -336,31 +337,14 @@ fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
     };
 }
 
-fn parseLet(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-    const let = try expectToken(ast, lexer, .let);
-
-    const name = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "identifier for let expression");
-    };
-
-    _ = try expectToken(ast, lexer, .equals);
-
-    const expr = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "value for let expression");
-    };
-
-    return try ast.new(let.loc, .{
-        .let = .{
-            .name = name,
-            .expr = expr,
-        },
-    });
-}
-
 fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     const inner_parser = parsePrefixedName;
 
     const @"fn" = try expectToken(ast, lexer, .@"fn");
+
+    const name = try parseAtom(ast, lexer) orelse {
+        return errorExpectedDesc(ast, lexer, "function name");
+    };
 
     const params = try inner_parser(ast, lexer) orelse {
         return errorExpectedDesc(ast, lexer, "function parameters");
@@ -378,6 +362,7 @@ fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
     return try ast.new(@"fn".loc, .{
         .@"fn" = .{
+            .name = name,
             .params = params,
             .returns = returns,
             .body = body,
@@ -418,13 +403,12 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     const pk = try lexer.peek() orelse return null;
     return switch (pk.tag) {
         // tokens with one possible result
-        .let => try parseLet(ast, lexer),
         .@"fn" => try parseFn(ast, lexer),
         .@"if" => try parseIf(ast, lexer),
 
         // atomic tokens
         .ident => ident: {
-            const ident = try ally.dupe(u8, lexer.slice(pk));
+            const ident = try env.ident(ally, lexer.slice(pk));
             lexer.accept(pk);
             break :ident try ast.new(pk.loc, .{ .ident = ident });
         },
@@ -608,11 +592,6 @@ fn parseProgram(ast: *Ast, lexer: *Lexer) ParseError!Ast.Node {
     });
 }
 
-pub const Into = enum {
-    program,
-    expr,
-};
-
 pub const Result = union(enum) {
     const Self = @This();
 
@@ -641,23 +620,7 @@ pub const Result = union(enum) {
 
 /// parse text into an ast node
 /// *remember to check ast for errors if there is a syntax error!*
-pub fn parse(
-    ast: *Ast,
-    source: fluent.Source,
-    comptime into: Into,
-) Error!Result {
+pub fn parse(ast: *Ast, source: fluent.Source) Error!Result {
     var lexer = Lexer.init(source);
-
-    return switch (into) {
-        .program => try Result.wrap(parseProgram(ast, &lexer)),
-        .expr => x: {
-            const node = parseExpr(ast, &lexer) catch |e| {
-                break :x Result.filter(e);
-            } orelse {
-                break :x Result.filter(errorUnexpectedEof(ast, &lexer));
-            };
-
-            break :x .{ .ok = node };
-        },
-    };
+    return try Result.wrap(parseProgram(ast, &lexer));
 }

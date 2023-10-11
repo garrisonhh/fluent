@@ -23,7 +23,6 @@ pub const Token = struct {
         true,
         false,
 
-        let,
         @"fn",
         @"if",
         then,
@@ -157,7 +156,6 @@ const Keyword = struct {
         const idents = [_][]const u8{
             "true",
             "false",
-            "let",
             "fn",
             "if",
             "then",
