@@ -57,7 +57,8 @@ pub const Value = union(enum) {
         }
     }
 
-    /// determines the type based on the data format (this might be slow)
+    /// determines the type based on the data format
+    /// TODO maybe start caching this in env when it gets complicated
     pub fn findType(self: Self) Type.Id {
         return switch (self) {
             inline .unit, .name, .type, .bool => |_, tag| predef: {

@@ -72,7 +72,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\fn useless {n: u64} u64 ->
+        \\fn useless {n: i64} i64 ->
         \\  0
         \\
     ;

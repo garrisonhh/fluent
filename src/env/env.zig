@@ -8,59 +8,11 @@ const idents = @import("idents.zig");
 const names = @import("names.zig");
 const rendering = @import("rendering.zig");
 
+pub const Value = @import("value.zig").Value;
 pub const Ident = idents.Ident;
 pub const Name = names.Name;
 
-/// names refer to defs
-pub const Def = union(enum) {
-    const Self = @This();
-    pub const Tag = std.meta.Tag(Self);
-
-    pub const Value = struct {
-        type: Type.Id,
-        // TODO representing consts
-    };
-
-    pub const Let = struct {
-        const VarMap = std.AutoHashMapUnmanaged(Ident, Type.Id);
-
-        vars: VarMap = .{},
-    };
-
-    pub const Namespace = struct {
-        const ChildSet = std.AutoHashMapUnmanaged(Name, void);
-
-        children: ChildSet = .{},
-    };
-
-    pub const Function = struct {
-        const ParamMap = std.AutoArrayHashMapUnmanaged(Ident, Type.Id);
-
-        params: ParamMap = .{},
-        returns: Type.Id,
-    };
-
-    // value: Value,
-    let: Let,
-    namespace: Namespace,
-    function: Function,
-
-    pub fn deinit(self: *Self, ally: Allocator) void {
-        switch (self.*) {
-            .let => |*let| {
-                let.vars.deinit(ally);
-            },
-            .namespace => |*ns| {
-                ns.children.deinit(ally);
-            },
-            .function => |*func| {
-                func.params.deinit(ally);
-            },
-        }
-    }
-};
-
-const DefMap = com.RefList(Name, Def);
+const DefMap = com.RefMap(Name, Value);
 
 var defs: DefMap = .{};
 
@@ -70,8 +22,8 @@ pub fn init() void {
 }
 
 pub fn deinit(ally: Allocator) void {
-    var scope_iter = defs.iterator();
-    while (scope_iter.next()) |scope| scope.deinit(ally);
+    var def_iter = defs.iterator();
+    while (def_iter.next()) |value| value.deinit(ally);
     defs.deinit(ally);
 
     names.deinit(ally);
@@ -84,17 +36,16 @@ pub fn deinit(ally: Allocator) void {
 
 /// add an entry to the env
 ///
-/// *def ownership is moved to the env*
-pub fn add(ally: Allocator, n: Name, def: Def) Allocator.Error!*Def {
-    try defs.put(ally, n, def);
-    return defs.get(n);
+/// *value ownership is moved to the env*
+pub fn add(ally: Allocator, n: Name, value: Value) Allocator.Error!void {
+    try defs.put(ally, n, value);
 }
 
-pub fn get(n: Name) ?*const Def {
+pub fn get(n: Name) ?*const Value {
     return getMut(n);
 }
 
-pub fn getMut(n: Name) ?*Def {
+pub fn getMut(n: Name) ?*Value {
     return defs.getOpt(n);
 }
 

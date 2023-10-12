@@ -92,7 +92,6 @@ fn autoEqlType(
         Type.Int.Bits,
         Type.Float.Bits,
         => a == b,
-        []const u8 => std.mem.eql(u8, a, b),
 
         // slice of autoEql-able
         []const Type.Id => eql: {
@@ -285,7 +284,9 @@ pub const PredefinedClass = enum {
 
 // interface ===================================================================
 
+/// maps id -> type; owns type memory
 var map = com.RefMap(Type.Id, Type){};
+/// set of type/id pairs
 var types = TypeSet{};
 var predef_cache = std.enums.EnumMap(PredefinedType, Type.Id){};
 var predef_cls_cache = std.enums.EnumMap(PredefinedClass, []const Type.Id){};
@@ -342,44 +343,81 @@ pub fn predefClass(c: PredefinedClass) []const Type.Id {
     return predef_cls_cache.getAssertContains(c);
 }
 
-/// creates an uninitiated type id
+/// creates an invalid type id for potentially self-referential types
 ///
-/// *you must call `set` on the id before it is accessed*
-pub fn new(ally: Allocator) Allocator.Error!Type.Id {
+/// *you must call `setSelfRef` on the id before it is accessed*
+pub fn newSelfRef(ally: Allocator) Allocator.Error!Type.Id {
     return try map.new(ally);
 }
 
-/// store a possibly self-referential type with a `this` id created using `new`
+/// store a possibly self-referential type with a `this` id created using
+/// `newSelfRef`, returning the intern'd type id
 ///
 /// *type ownership is moved on calling this*
-pub fn set(ally: Allocator, this: Type.Id, t: Type) Allocator.Error!void {
+pub fn setSelfRef(
+    ally: Allocator,
+    this: Type.Id,
+    t: Type,
+) Allocator.Error!Type.Id {
     const res = try types.getOrPut(ally, .{
         .id = this,
         // remember this is a dangling pointer
         .type = &t,
     });
 
-    if (!res.found_existing) {
-        // new entry
-        try map.set(ally, this, t);
-        res.key_ptr.* = .{
-            .id = this,
-            .type = map.get(this),
-        };
+    if (res.found_existing) {
+        // this type already exists
+        t.deinit(ally);
+        return res.key_ptr.id;
     }
+
+    try map.set(ally, this, t);
+    res.key_ptr.* = .{
+        .id = this,
+        .type = map.get(this),
+    };
+
+    return this;
 }
 
-/// create an un-self-referential type
+/// create a type (convenient for types that can't be self referential)
 ///
 /// *type ownership is moved on calling this*
 pub fn put(ally: Allocator, t: Type) Allocator.Error!Type.Id {
     errdefer t.deinit(ally);
-    const id = try new(ally);
-    try set(ally, id, t);
-
-    return id;
+    return try setSelfRef(ally, try newSelfRef(ally), t);
 }
 
 pub fn get(id: Type.Id) *const Type {
     return map.get(id);
+}
+
+// debugging ===================================================================
+
+fn dumpTypeImpl(t: Type, this: Type.Id) !void {
+    if (builtin.mode != .Debug) {
+        @compileError("don't leave this in release code");
+    }
+
+    const blox = @import("blox");
+    const ally = std.heap.page_allocator;
+    const stderr = std.io.getStdErr().writer();
+
+    var mason = blox.Mason.init(ally);
+    defer mason.deinit();
+
+    const div = try mason.newBox(&.{
+        try mason.newPre("[dump]", .{}),
+        try rendering.renderType(&mason, t, this),
+        try mason.newSpacer(0, 1, .{}),
+    }, .{});
+
+    try mason.write(div, stderr, .{});
+}
+
+/// dump a type to stderr in debug mode
+pub fn dumpType(t: Type, this: Type.Id) void {
+    dumpTypeImpl(t, this) catch |e| {
+        std.debug.panic("error in dumpType: {s}", .{@errorName(e)});
+    };
 }

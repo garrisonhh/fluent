@@ -15,7 +15,7 @@ const span = blox.BoxOptions{
     .direction = .right,
 };
 
-fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.Div {
+pub fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.Div {
     const ally = mason.ally;
     return switch (t) {
         inline .unit,

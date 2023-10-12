@@ -5,6 +5,7 @@ const env = @import("env.zig");
 const theme = struct {
     const c = blox.Color.init;
     const ident = c(.normal, .red);
+    const data = c(.normal, .magenta);
 };
 
 const span = blox.BoxOptions{ .direction = .right };
@@ -28,4 +29,34 @@ pub fn renderName(mason: *blox.Mason, name: env.Name) blox.Error!blox.Div {
     }
 
     return mason.newBox(divs.items, span);
+}
+
+pub const RenderValueError = std.fmt.AllocPrintError || blox.Error;
+
+pub fn renderValue(
+    mason: *blox.Mason,
+    value: env.Value,
+) RenderValueError!blox.Div {
+    const ally = mason.ally;
+    return switch (value) {
+        .unit => try mason.newPre("()", .{ .fg = theme.data }),
+        .name => |name| try renderName(mason, name),
+        .bool => |b| bool: {
+            const text = try std.fmt.allocPrint(ally, "{}", .{b});
+            defer ally.free(text);
+
+            break :bool try mason.newPre(text, .{ .fg = theme.data });
+        },
+
+        inline .int, .uint, .float => |x| switch (x) {
+            inline else => |n| num: {
+                const text = try std.fmt.allocPrint(ally, "{d}", .{n});
+                defer ally.free(text);
+
+                break :num try mason.newPre(text, .{ .fg = theme.data });
+            },
+        },
+
+
+    };
 }

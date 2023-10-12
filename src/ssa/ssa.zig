@@ -4,12 +4,13 @@ const com = @import("common");
 const rendering = @import("rendering.zig");
 const fluent = @import("../mod.zig");
 const Type = fluent.Type;
-const Name = fluent.env.Name;
+const Name = fluent.Name;
 
 pub const Local = com.Ref(.ssa_local, 32);
 pub const LocalList = com.RefList(Local, Type.Id);
 
 /// raw values that you can insert into ssa
+/// TODO instead use fluent Value
 pub const Constant = union(enum) {
     const Self = @This();
     pub const Ref = com.Ref(.ssa_constant, 32);

@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
-const blox = @import("blox");
 
 pub const Type = union(enum) {
     const Self = @This();
