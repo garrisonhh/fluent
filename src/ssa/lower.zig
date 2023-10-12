@@ -73,6 +73,9 @@ fn lowerFunction(
     // build + update env entry
     try func.build(entry);
 
+    const func_value = env.lookup(name).?;
+    env.getMut(func_value).function.ssa = func.ref;
+
     return func.ref;
 }
 

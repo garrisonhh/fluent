@@ -46,7 +46,6 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
         .bool => |b| bool: {
             const text = try std.fmt.allocPrint(ally, "{}", .{b});
             defer ally.free(text);
-
             break :bool try mason.newPre(text, .{ .fg = theme.data });
         },
 
@@ -54,17 +53,31 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
             inline else => |n| num: {
                 const text = try std.fmt.allocPrint(ally, "{d}", .{n});
                 defer ally.free(text);
-
                 break :num try mason.newPre(text, .{ .fg = theme.data });
             },
         },
 
-        .function => |func| try mason.newBox(&.{
-            try mason.newPre("fn", .{ .fg = theme.syntax }),
-            try mason.newPre(" <", .{}),
-            try typer.render(mason, func.type),
-            try mason.newPre(">", .{}),
-        }, span),
+        .function => |func| func: {
+            const lowered = func.ssa != null;
+            const status = try mason.newPre(
+                if (lowered) "lowered" else "unlowered",
+                .{
+                    .fg = blox.Color.init(
+                        .normal,
+                        if (lowered) .green else .red,
+                    ),
+                },
+            );
+
+            break :func try mason.newBox(&.{
+                try mason.newPre("fn", .{ .fg = theme.syntax }),
+                try mason.newPre(" <", .{}),
+                try typer.render(mason, func.type),
+                try mason.newPre("> (", .{}),
+                status,
+                try mason.newPre(")", .{}),
+            }, span);
+        },
     };
 }
 

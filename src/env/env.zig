@@ -74,6 +74,10 @@ pub fn get(ref: Value.Ref) *const Value {
     return values.get(ref);
 }
 
+pub fn getMut(ref: Value.Ref) *Value {
+    return values.get(ref);
+}
+
 /// if a name is defined, get its value
 pub fn lookup(n: Name) ?Value.Ref {
     return defs.get(n);

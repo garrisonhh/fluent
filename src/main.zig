@@ -79,8 +79,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\fn useless {n: i64} i64 ->
-        \\  0
+        \\fn useless {} u64 -> 0
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);
