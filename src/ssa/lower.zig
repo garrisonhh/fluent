@@ -61,6 +61,7 @@ fn lowerFunction(
 ) Error!ssa.Func.Ref {
     var func = try prog.func(name);
 
+    // compile entry block
     const params_type = ast.getType(params).?;
     const param_types = typer.get(params_type).@"struct".fields;
     for (param_types) |param_type| {
@@ -68,6 +69,8 @@ fn lowerFunction(
     }
 
     const entry = try lowerBlockExpr(ast, prog, &func, body, null);
+
+    // build + update env entry
     try func.build(entry);
 
     return func.ref;

@@ -60,10 +60,49 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
         },
 
         .function => |func| try mason.newBox(&.{
-            try mason.newPre("fn ", .{ .fg = theme.syntax }),
-            try mason.newPre("<", .{}),
+            try mason.newPre("fn", .{ .fg = theme.syntax }),
+            try mason.newPre(" <", .{}),
             try typer.render(mason, func.type),
             try mason.newPre(">", .{}),
         }, span),
     };
+}
+
+pub fn renderValueRef(mason: *blox.Mason, ref: Value.Ref) blox.Error!blox.Div {
+    return try renderValue(mason, env.get(ref).*);
+}
+
+pub fn renderEnv(mason: *blox.Mason) blox.Error!blox.Div {
+    const ally = mason.ally;
+
+    const space = try mason.newSpacer(1, 1, .{});
+    const indent = try mason.newSpacer(2, 1, .{});
+
+    var divs = std.ArrayList(blox.Div).init(ally);
+    defer divs.deinit();
+
+    var def_iter = env.defs.iterator();
+    while (def_iter.next()) |entry| {
+        const name = entry.key_ptr.*;
+        const ref = entry.value_ptr.*;
+
+        const name_div = try renderName(mason, name);
+        const value_div = try renderValueRef(mason, ref);
+
+        const entry_div = switch (mason.getSize(value_div)[1]) {
+            0...1 => try mason.newBox(&.{
+                name_div,
+                space,
+                value_div,
+            }, span),
+            else => try mason.newBox(&.{
+                name_div,
+                try mason.newBox(&.{ indent, value_div }, span),
+            }, .{}),
+        };
+
+        try divs.append(entry_div);
+    }
+
+    return try mason.newBox(divs.items, .{});
 }

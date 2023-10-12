@@ -6,6 +6,7 @@ const Ast = fluent.Ast;
 const Loc = fluent.Loc;
 const Type = fluent.Type;
 const Value = fluent.Value;
+const Name = fluent.Name;
 const env = fluent.env;
 const typer = fluent.typer;
 
@@ -115,24 +116,6 @@ fn expectMatching(
     return actual;
 }
 
-/// analyze a quoted node and expect it to match the expected type
-fn expectQuoted(
-    ast: *Ast,
-    node: Ast.Node,
-    expected: Type.Id,
-) SemaError!void {
-    const actual = try analyzeQuoted(ast, node);
-    if (!actual.eql(expected)) {
-        return invalidType(ast, .{
-            .expected = .{
-                .loc = ast.getLoc(node),
-                .expected = expected,
-                .found = actual,
-            },
-        });
-    }
-}
-
 fn analyzeUnary(
     ast: *Ast,
     node: Ast.Node,
@@ -155,30 +138,6 @@ fn dirtyEvilHackAnalyzePredefType(
     const type_name = env.get(value).name;
     const type_value = env.lookup(type_name).?;
     return env.get(type_value).type;
-}
-
-/// dirty evil hack to get function parameter sema working
-/// TODO remove this and do it correctly once I can eval types
-fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
-    const ally = ast.ally;
-
-    var params = std.ArrayList(Type.Id).init(ally);
-    defer params.deinit();
-
-    const record_entries = ast.get(node).record;
-    for (record_entries) |entry| {
-        // TODO store func param names in env
-        // const name = ast.get(entry.key).ident;
-
-        const param = try dirtyEvilHackAnalyzePredefType(ast, entry.value);
-        try params.append(param);
-    }
-
-    const params_type = try typer.put(ally, .{
-        .@"struct" = .{ .fields = try params.toOwnedSlice() },
-    });
-
-    return try ast.setType(node, params_type);
 }
 
 fn analyzeBinary(
@@ -228,10 +187,7 @@ fn analyzeCall(
     _ = ast;
     _ = node;
     _ = call;
-
-    // TODO analyse call
-
-    return typer.predef(.unit);
+    @panic("TODO analyze call");
 }
 
 fn analyzeRecord(
@@ -242,11 +198,11 @@ fn analyzeRecord(
     _ = ast;
     _ = node;
     _ = entries;
-
-    // TODO analyze records
-    return typer.predef(.unit);
+    @panic("TODO analyze records");
 }
 
+/// TODO this function will have to be redone from scratch once eval() exists,
+/// so don't worry too much about making it correct
 fn analyzeFn(
     ast: *Ast,
     node: Ast.Node,
@@ -254,13 +210,41 @@ fn analyzeFn(
 ) SemaError!Type.Id {
     const ally = ast.ally;
 
-    const params_type = try dirtyEvilHackAnalyzeFuncParams(ast, meta.params);
+    // name
+    // TODO contextual namespace for this name
+    const fn_name_value = ast.get(meta.name).value;
+    const fn_name = env.get(fn_name_value).name;
+
+    // parameters
+    var params = std.ArrayList(Type.Id).init(ally);
+    defer params.deinit();
+    var param_map = Value.Function.ParamMap{};
+    errdefer param_map.deinit(ally);
+
+    const record_entries = ast.get(meta.params).record;
+    for (record_entries) |entry| {
+        const param_type = try dirtyEvilHackAnalyzePredefType(ast, entry.value);
+        try params.append(param_type);
+
+        // ew
+        const pname_value = ast.get(entry.key).value;
+        const pname_name = env.get(pname_value).name;
+        const pname_ident = env.nameSlice(pname_name)[0];
+        try param_map.put(ally, pname_ident, param_type);
+    }
+
+    const params_type = try typer.put(ally, .{
+        .@"struct" = .{ .fields = try params.toOwnedSlice() },
+    });
+
+    _ = try ast.setType(meta.params, params_type);
+
+    // collect fn type
     const return_type = try dirtyEvilHackAnalyzePredefType(ast, meta.returns);
     const body_type = try analyzeExpr(ast, meta.body);
 
     _ = body_type; // TODO constrain this node with the return type
 
-    // construct fn type
     const param_fields = typer.get(params_type).@"struct".fields;
 
     const func_type = try typer.put(ally, .{
@@ -269,23 +253,18 @@ fn analyzeFn(
             .returns = return_type,
         },
     });
+    _ = try ast.setType(node, func_type);
 
-    return try ast.setType(node, func_type);
-}
+    // define this function in the env
+    _ = try env.put(ally, fn_name, .{
+        .function = .{
+            .type = func_type,
+            .params = param_map,
+            .ssa = null,
+        },
+    });
 
-fn analyzeQuoted(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
-    return switch (ast.get(node).*) {
-        .unit => try ast.setType(node, typer.predef(.unit)),
-        .bool => try ast.setType(node, typer.predef(.bool)),
-        .ident => try ast.setType(node, typer.predef(.ident)),
-        .int => try ast.setType(node, typer.predef(.i64)),
-        .real => try ast.setType(node, typer.predef(.f64)),
-
-        else => |expr| std.debug.panic(
-            "TODO analyze quoted {s}",
-            .{@tagName(expr)},
-        ),
-    };
+    return func_type;
 }
 
 fn analyzeValue(ast: *Ast, node: Ast.Node, ref: Value.Ref) SemaError!Type.Id {

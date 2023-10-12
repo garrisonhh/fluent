@@ -34,10 +34,10 @@ pub const Value = union(enum) {
     };
 
     pub const Function = struct {
-        const ParamMap = std.AutoArrayHashMapUnmanaged(Ident, Type.Id);
+        pub const ParamMap = std.AutoArrayHashMapUnmanaged(Ident, Type.Id);
 
         type: Type.Id,
-        params: ParamMap = .{},
+        params: ParamMap,
         /// null if this function hasn't yet been compiled
         ssa: ?fluent.ssa.Func.Ref,
     };
@@ -51,10 +51,12 @@ pub const Value = union(enum) {
     float: Float,
     function: Function,
 
-    pub fn deinit(self: Self, ally: Allocator) void {
-        _ = ally;
-        switch (self) {
-            else => {},
+    pub fn deinit(self: *Self, ally: Allocator) void {
+        switch (self.*) {
+            .unit, .name, .type, .bool, .uint, .int, .float => {},
+            .function => |*func| {
+                func.params.deinit(ally);
+            },
         }
     }
 

@@ -291,7 +291,7 @@ pub fn render(
     }, span);
 
     return switch (expr) {
-        .value => |v| try fluent.env.renderValue(mason, fluent.env.get(v).*),
+        .value => |v| try fluent.env.renderValue(mason, v),
 
         inline .parens,
         .record,

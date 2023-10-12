@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const com = @import("common");
+const blox = @import("blox");
 const fluent = @import("../mod.zig");
 const Type = fluent.Type;
 const idents = @import("idents.zig");
@@ -9,6 +10,7 @@ const Ident = idents.Ident;
 const names = @import("names.zig");
 const Name = names.Name;
 const Value = @import("value.zig").Value;
+const rendering = @import("rendering.zig");
 
 // TODO env should probably just be managed
 
@@ -18,7 +20,8 @@ const DefMap = std.AutoHashMapUnmanaged(Name, Value.Ref);
 const ReverseMap = std.AutoHashMapUnmanaged(Value.Ref, Name);
 
 var values: Value.RefList = .{};
-var defs: DefMap = .{};
+/// pub for rendering only, don't touch this directly
+pub var defs: DefMap = .{};
 var reverse: ReverseMap = .{};
 
 pub fn init() void {
@@ -42,9 +45,6 @@ pub fn deinit(ally: Allocator) void {
         reverse = .{};
     }
 }
-
-/// render{Ident, Name, Value}
-pub usingnamespace @import("rendering.zig");
 
 /// place a value in the env's memory context
 ///
@@ -111,3 +111,11 @@ pub const nameSlice = names.slice;
 pub const namePush = names.push;
 /// drop an ident from a name (get the parent)
 pub const nameDrop = names.drop;
+
+// rendering ===================================================================
+
+pub const renderIdent = rendering.renderIdent;
+pub const renderName = rendering.renderName;
+pub const renderValue = rendering.renderValueRef;
+pub const render = rendering.renderEnv;
+

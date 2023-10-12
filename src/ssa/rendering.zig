@@ -59,7 +59,7 @@ fn renderOp(
     const code_tag = try mason.newPre(code_text, .{ .fg = theme.opcode });
 
     const code = switch (op.code) {
-        .constant => |v| try fluent.env.renderValue(mason, fluent.env.get(v).*),
+        .constant => |v| try fluent.env.renderValue(mason, v),
 
         .branch => |br| try mason.newBox(&.{
             code_tag,

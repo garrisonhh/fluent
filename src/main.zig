@@ -59,6 +59,13 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     try writer.print("[ssa]\n", .{});
     try mason.write(ssa_div, writer, .{});
     try writer.print("\n", .{});
+
+    // render env
+    const env_div = try fluent.env.render(&mason);
+
+    try writer.print("[env]\n", .{});
+    try mason.write(env_div, writer, .{});
+    try writer.print("\n", .{});
 }
 
 pub fn main() !void {
