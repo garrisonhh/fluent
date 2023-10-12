@@ -1,20 +1,26 @@
 const std = @import("std");
 const blox = @import("blox");
-const env = @import("env.zig");
+const fluent = @import("../mod.zig");
+const Ident = fluent.Ident;
+const Name = fluent.Name;
+const Value = fluent.Value;
+const env = fluent.env;
+const typer = fluent.typer;
 
 const theme = struct {
     const c = blox.Color.init;
+    const syntax = c(.normal, .cyan);
     const ident = c(.normal, .red);
     const data = c(.normal, .magenta);
 };
 
 const span = blox.BoxOptions{ .direction = .right };
 
-pub fn renderIdent(mason: *blox.Mason, ident: env.Ident) blox.Error!blox.Div {
+pub fn renderIdent(mason: *blox.Mason, ident: Ident) blox.Error!blox.Div {
     return try mason.newPre(env.identStr(ident), .{ .fg = theme.ident });
 }
 
-pub fn renderName(mason: *blox.Mason, name: env.Name) blox.Error!blox.Div {
+pub fn renderName(mason: *blox.Mason, name: Name) blox.Error!blox.Div {
     const dot = try mason.newPre(".", .{});
 
     const idents = env.nameSlice(name);
@@ -31,15 +37,11 @@ pub fn renderName(mason: *blox.Mason, name: env.Name) blox.Error!blox.Div {
     return mason.newBox(divs.items, span);
 }
 
-pub const RenderValueError = std.fmt.AllocPrintError || blox.Error;
-
-pub fn renderValue(
-    mason: *blox.Mason,
-    value: env.Value,
-) RenderValueError!blox.Div {
+pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
     const ally = mason.ally;
     return switch (value) {
         .unit => try mason.newPre("()", .{ .fg = theme.data }),
+        .type => |t| try typer.render(mason, t),
         .name => |name| try renderName(mason, name),
         .bool => |b| bool: {
             const text = try std.fmt.allocPrint(ally, "{}", .{b});
@@ -57,6 +59,11 @@ pub fn renderValue(
             },
         },
 
-
+        .function => |func| try mason.newBox(&.{
+            try mason.newPre("fn ", .{ .fg = theme.syntax }),
+            try mason.newPre("<", .{}),
+            try typer.render(mason, func.type),
+            try mason.newPre(">", .{}),
+        }, span),
     };
 }

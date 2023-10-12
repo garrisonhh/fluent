@@ -5,23 +5,10 @@ const rendering = @import("rendering.zig");
 const fluent = @import("../mod.zig");
 const Type = fluent.Type;
 const Name = fluent.Name;
+const Value = fluent.Value;
 
 pub const Local = com.Ref(.ssa_local, 32);
 pub const LocalList = com.RefList(Local, Type.Id);
-
-/// raw values that you can insert into ssa
-/// TODO instead use fluent Value
-pub const Constant = union(enum) {
-    const Self = @This();
-    pub const Ref = com.Ref(.ssa_constant, 32);
-    pub const RefList = com.RefList(Ref, Self);
-
-    unit,
-    bool: bool,
-    uint: u64,
-    float: f64,
-    func_ref: Func.Ref,
-};
 
 pub const Opcode = union(enum) {
     const Self = @This();
@@ -38,7 +25,7 @@ pub const Opcode = union(enum) {
         args: []const Local,
     };
 
-    constant: Constant.Ref,
+    constant: Value.Ref,
     branch: Branch,
     call: Call,
 
@@ -96,12 +83,10 @@ pub const Func = struct {
     name: Name,
     type: Type.Id,
     entry: Block.Ref,
-    constants: Constant.RefList,
     locals: LocalList,
     blocks: Block.RefList,
 
     pub fn deinit(self: *Self, ally: Allocator) void {
-        self.constants.deinit(ally);
         self.locals.deinit(ally);
 
         var block_iter = self.blocks.iterator();
@@ -190,7 +175,6 @@ pub const FuncBuilder = struct {
     ref: Func.Ref,
     name: Name,
     params: std.ArrayListUnmanaged(Local) = .{},
-    constants: Constant.RefList = .{},
     locals: LocalList = .{},
     blocks: Block.RefList = .{},
 
@@ -222,7 +206,6 @@ pub const FuncBuilder = struct {
             .name = self.name,
             .type = func_type,
             .entry = entry,
-            .constants = self.constants,
             .locals = self.locals,
             .blocks = self.blocks,
         });
@@ -233,11 +216,6 @@ pub const FuncBuilder = struct {
         const p = try self.local(t);
         try self.params.append(self.ally, p);
         return p;
-    }
-
-    /// add a new constant to the function
-    pub fn constant(self: *Self, c: Constant) Allocator.Error!Constant.Ref {
-        return try self.constants.put(self.ally, c);
     }
 
     /// add a new local to the function

@@ -5,6 +5,8 @@ const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
 const Loc = fluent.Loc;
 const Type = fluent.Type;
+const Value = fluent.Value;
+const env = fluent.env;
 const typer = fluent.typer;
 
 pub const Error =
@@ -149,10 +151,10 @@ fn dirtyEvilHackAnalyzePredefType(
 ) Allocator.Error!Type.Id {
     _ = try ast.setType(node, typer.predef(.type));
 
-    const type_ident = ast.get(node).ident;
-    const type_name_str = fluent.env.identStr(type_ident);
-    const predef = std.meta.stringToEnum(typer.PredefinedType, type_name_str).?;
-    return typer.predef(predef);
+    const value = ast.get(node).value;
+    const type_name = env.get(value).name;
+    const type_value = env.lookup(type_name).?;
+    return env.get(type_value).type;
 }
 
 /// dirty evil hack to get function parameter sema working
@@ -165,8 +167,8 @@ fn dirtyEvilHackAnalyzeFuncParams(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
 
     const record_entries = ast.get(node).record;
     for (record_entries) |entry| {
-        const name = ast.get(entry.key).ident;
-        _ = name; // TODO store struct field names in env
+        // TODO store func param names in env
+        // const name = ast.get(entry.key).ident;
 
         const param = try dirtyEvilHackAnalyzePredefType(ast, entry.value);
         try params.append(param);
@@ -286,14 +288,15 @@ fn analyzeQuoted(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     };
 }
 
+fn analyzeValue(ast: *Ast, node: Ast.Node, ref: Value.Ref) SemaError!Type.Id {
+    const t = env.get(ref).findType();
+    return try ast.setType(node, t);
+}
+
 /// dispatch for analysis
 fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return switch (ast.get(node).*) {
-        .unit => try ast.setType(node, typer.predef(.unit)),
-        .bool => try ast.setType(node, typer.predef(.bool)),
-        .int => try ast.setType(node, typer.predef(.i64)),
-        .real => try ast.setType(node, typer.predef(.f64)),
-
+        .value => |ref| try analyzeValue(ast, node, ref),
         .unary => |meta| try analyzeUnary(ast, node, meta),
         .binary => |meta| try analyzeBinary(ast, node, meta),
         .record => |entries| try analyzeRecord(ast, node, entries),

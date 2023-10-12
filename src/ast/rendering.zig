@@ -291,29 +291,8 @@ pub fn render(
     }, span);
 
     return switch (expr) {
-        // literals
-        .unit => try mason.newBox(&.{
-            label,
-            space,
-            try mason.newPre("()", .{ .fg = theme.data }),
-        }, span),
-        .ident => |ident| try fluent.env.renderIdent(mason, ident),
+        .value => |v| try fluent.env.renderValue(mason, fluent.env.get(v).*),
 
-        .bool => |b| b: {
-            const str = if (b) "true" else "false";
-            const data = try mason.newPre(str, .{ .fg = theme.data });
-            break :b try mason.newBox(&.{ label, space, data }, span);
-        },
-
-        inline .int, .real => |n| n: {
-            const text = try std.fmt.allocPrint(ally, "{d}", .{n});
-            defer ally.free(text);
-
-            const data = try mason.newPre(text, .{ .fg = theme.data });
-            break :n try mason.newBox(&.{ label, space, data }, span);
-        },
-
-        // containers
         inline .parens,
         .record,
         .call,

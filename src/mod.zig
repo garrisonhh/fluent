@@ -6,9 +6,9 @@ pub const Type = @import("types/type.zig").Type;
 pub const typer = @import("types/typer.zig");
 
 pub const env = @import("env/env.zig");
-pub const Ident = env.Ident;
-pub const Name = env.Name;
-pub const Value = env.Value;
+pub const Ident = @import("env/idents.zig").Ident;
+pub const Name = @import("env/names.zig").Name;
+pub const Value = @import("env/value.zig").Value;
 
 pub const sources = @import("sources.zig");
 pub const Source = sources.Source;

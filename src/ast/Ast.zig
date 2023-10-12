@@ -9,7 +9,8 @@ const rendering = @import("rendering.zig");
 const fluent = @import("../mod.zig");
 const Loc = fluent.Loc;
 const Type = fluent.Type;
-const Ident = fluent.env.Ident;
+const Value = fluent.Value;
+const env = fluent.env;
 
 pub const Error = @import("error.zig").Error;
 
@@ -70,12 +71,7 @@ pub const Expr = union(enum) {
         if_false: Node,
     };
 
-    unit,
-    bool: bool,
-    ident: Ident,
-    int: Int,
-    real: Real,
-
+    value: Value.Ref,
     parens: Node,
     record: []const RecordEntry,
     call: []const Node,
@@ -87,11 +83,7 @@ pub const Expr = union(enum) {
 
     fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
-            .unit,
-            .bool,
-            .ident,
-            .int,
-            .real,
+            .value,
             .parens,
             .unary,
             .binary,
@@ -159,6 +151,13 @@ pub fn new(self: *Ast, loc: Loc, expr: Expr) Allocator.Error!Node {
     return node;
 }
 
+/// convenience function for creating a value expr
+pub fn newValue(self: *Ast, loc: Loc, value: Value) Allocator.Error!Node {
+    return try self.new(loc, .{
+        .value = try env.value(self.ally, value),
+    });
+}
+
 pub fn get(self: *const Ast, node: Node) *const Expr {
     return self.map.get(node);
 }
@@ -183,7 +182,7 @@ fn exprDataEql(self: *const Ast, a: anytype, b: @TypeOf(a)) bool {
 
         bool, Expr.Int, Expr.Real => a == b,
 
-        Ident, Node => self.eql(a, b),
+        Node => self.eql(a, b),
 
         []const Node => arr: {
             if (a.len != b.len) {

@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
+const Name = fluent.Name;
 const env = fluent.env;
 const ssa = fluent.ssa;
 const typer = fluent.typer;
@@ -54,7 +55,7 @@ fn lowerBlockExpr(
 fn lowerFunction(
     ast: *const Ast,
     prog: *ssa.Program,
-    name: env.Name,
+    name: Name,
     params: Ast.Node,
     body: Ast.Node,
 ) Error!ssa.Func.Ref {
@@ -82,18 +83,7 @@ fn lowerExpr(
 
     const t = ast.getType(node).?;
     return switch (ast.get(node).*) {
-        .unit => try block.op(t, .{
-            .constant = try func.constant(.unit),
-        }),
-        .bool => |v| try block.op(t, .{
-            .constant = try func.constant(.{ .bool = v }),
-        }),
-        .int => |v| try block.op(t, .{
-            .constant = try func.constant(.{ .uint = v }),
-        }),
-        .real => |v| try block.op(t, .{
-            .constant = try func.constant(.{ .float = v }),
-        }),
+        .value => |ref| try block.op(t, .{ .constant = ref }),
 
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
@@ -150,8 +140,8 @@ pub fn lower(
         switch (ast.get(decl).*) {
             .@"fn" => |@"fn"| {
                 // TODO eval this; this is a dirty evil hack
-                const name_ident = ast.get(@"fn".name).ident;
-                const name = try fluent.env.name(ast.ally, &.{name_ident});
+                const value = ast.get(@"fn".name).value;
+                const name = env.get(value).name;
 
                 _ = try lowerFunction(
                     ast,

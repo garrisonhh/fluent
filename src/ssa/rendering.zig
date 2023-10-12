@@ -15,30 +15,7 @@ const theme = struct {
     const c = blox.Color.init;
     const meta = c(.bright, .cyan);
     const opcode = c(.bright, .yellow);
-    const data = c(.bright, .magenta);
 };
-
-fn renderConstant(
-    mason: *blox.Mason,
-    prog: *const ssa.Program,
-    func: *const ssa.Func,
-    constant: ssa.Constant.Ref,
-) RenderError!blox.Div {
-    const ally = mason.ally;
-    const allocPrint = std.fmt.allocPrint;
-
-    const text = switch (func.constants.get(constant).*) {
-        .unit => try allocPrint(ally, "()", .{}),
-        .bool => |b| try allocPrint(ally, "{}", .{b}),
-        inline .uint, .float => |n| try allocPrint(ally, "{d}", .{n}),
-        .func_ref => |ref| {
-            return try renderFuncName(mason, prog, ref);
-        },
-    };
-    defer ally.free(text);
-
-    return try mason.newPre(text, .{ .fg = theme.data });
-}
 
 fn renderLocal(
     mason: *blox.Mason,
@@ -82,7 +59,7 @@ fn renderOp(
     const code_tag = try mason.newPre(code_text, .{ .fg = theme.opcode });
 
     const code = switch (op.code) {
-        .constant => |c| try renderConstant(mason, prog, func, c),
+        .constant => |v| try fluent.env.renderValue(mason, fluent.env.get(v).*),
 
         .branch => |br| try mason.newBox(&.{
             code_tag,

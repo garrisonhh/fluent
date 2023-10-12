@@ -10,6 +10,7 @@ const Name = @import("names.zig").Name;
 /// raw values used to represent fluent data across the compiler
 pub const Value = union(enum) {
     const Self = @This();
+    pub const Tag = std.meta.Tag(Self);
     pub const Ref = com.Ref(.value, 64);
     pub const RefList = com.RefList(Ref, Self);
 
@@ -72,6 +73,31 @@ pub const Value = union(enum) {
                 },
             },
             .function => |f| f.type,
+        };
+    }
+
+    pub fn clone(self: Self, ally: Allocator) Allocator.Error!Self {
+        _ = self;
+        _ = ally;
+        @compileError("TODO");
+    }
+
+    pub fn eql(self: Self, other: Self) bool {
+        if (@as(Tag, self) != @as(Tag, other)) {
+            return false;
+        }
+
+        return switch (self) {
+            .unit, .bool, .uint, .float => std.meta.eql(self, other),
+
+            inline .name,
+            .type,
+            => |ref, tag| ref.eql(@field(other, @tagName(tag))),
+
+            else => |tag| std.debug.panic(
+                "TODO value.eql for {s}",
+                .{@tagName(tag)},
+            ),
         };
     }
 };

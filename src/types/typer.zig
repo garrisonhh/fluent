@@ -7,7 +7,6 @@ const com = @import("common");
 const rendering = @import("rendering.zig");
 const Type = @import("type.zig").Type;
 const fluent = @import("../mod.zig");
-const env = fluent.env;
 
 /// recursively hashes Type with awareness of self referencing
 fn autoHashType(
@@ -42,8 +41,8 @@ fn autoHashType(
 
         // hash value directly
         void,
-        env.Ident,
-        env.Name,
+        fluent.Ident,
+        fluent.Name,
         Type.Int.Signedness,
         Type.Int.Bits,
         Type.Float.Bits,
@@ -195,6 +194,8 @@ const TypeSet = std.HashMapUnmanaged(
     std.hash_map.default_max_load_percentage,
 );
 
+// predefs =====================================================================
+
 /// types which are cached on init
 pub const PredefinedType = enum {
     const Self = @This();
@@ -282,20 +283,17 @@ pub const PredefinedClass = enum {
     }
 };
 
-// interface ===================================================================
-
-/// maps id -> type; owns type memory
-var map = com.RefMap(Type.Id, Type){};
-/// set of type/id pairs
-var types = TypeSet{};
-var predef_cache = std.enums.EnumMap(PredefinedType, Type.Id){};
-var predef_cls_cache = std.enums.EnumMap(PredefinedClass, []const Type.Id){};
-
-pub fn init(ally: Allocator) Allocator.Error!void {
+/// ensure env is initialized before this is called
+fn initPredefs(ally: Allocator) Allocator.Error!void {
     for (std.enums.values(PredefinedType)) |p| {
         const t = try p.initType(ally);
         const id = try put(ally, t);
         predef_cache.put(p, id);
+
+        const name = try fluent.env.name(ally, &.{
+            try fluent.env.ident(ally, @tagName(p)),
+        });
+        _ = try fluent.env.put(ally, name, .{ .type = id });
     }
 
     for (std.enums.values(PredefinedClass)) |c| {
@@ -307,6 +305,19 @@ pub fn init(ally: Allocator) Allocator.Error!void {
 
         predef_cls_cache.put(c, cls_types);
     }
+}
+
+// interface ===================================================================
+
+/// maps id -> type; owns type memory
+var map = com.RefMap(Type.Id, Type){};
+/// set of type/id pairs
+var types = TypeSet{};
+var predef_cache = std.enums.EnumMap(PredefinedType, Type.Id){};
+var predef_cls_cache = std.enums.EnumMap(PredefinedClass, []const Type.Id){};
+
+pub fn init(ally: Allocator) Allocator.Error!void {
+    try initPredefs(ally);
 }
 
 pub fn deinit(ally: Allocator) void {
