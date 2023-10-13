@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const com = @import("common");
+const fluent = @import("../mod.zig");
+const Ident = fluent.Ident;
 
 pub const Type = union(enum) {
     const Self = @This();
@@ -35,6 +37,17 @@ pub const Type = union(enum) {
         returns: Type.Id,
     };
 
+    pub const Class = struct {
+        pub const Member = struct {
+            ident: Ident,
+            type: Type.Id,
+        };
+
+        /// typeclasses define a number of declarations required in the type's
+        /// namespace; e.g. consts + functions
+        members: []const Member,
+    };
+
     pub const Struct = struct {
         fields: []const Type.Id,
     };
@@ -46,6 +59,8 @@ pub const Type = union(enum) {
     int: Int,
     float: Float,
     @"fn": Fn,
+    /// typeclass
+    class: Class,
     @"struct": Struct,
 
     pub fn deinit(self: Self, ally: Allocator) void {
@@ -60,6 +75,9 @@ pub const Type = union(enum) {
 
             .@"fn" => |f| {
                 ally.free(f.params);
+            },
+            .class => |cls| {
+                ally.free(cls.members);
             },
             .@"struct" => |st| {
                 ally.free(st.fields);
@@ -80,6 +98,9 @@ pub const Type = union(enum) {
 
             .@"fn" => |*f| {
                 f.params = try ally.dupe(Type.Id, f.params);
+            },
+            .class => |*cls| {
+                cls.members = try ally.dupe(Class.Member, cls.members);
             },
             .@"struct" => |*st| {
                 st.fields = try ally.dupe(Type.Id, st.fields);

@@ -155,33 +155,6 @@ fn renderSemaError(
             try exp.loc.render(mason),
         }, .{}),
 
-        .expected_one_of => |exp| exp: {
-            const comma = try mason.newPre(", ", .{});
-
-            var desc_divs = std.ArrayList(blox.Div).init(mason.ally);
-            defer desc_divs.deinit();
-
-            try desc_divs.append(try mason.newPre("expected one of: ", .{}));
-
-            for (exp.expected, 0..) |t, i| {
-                if (i > 0) try desc_divs.append(comma);
-                try desc_divs.append(try typer.render(mason, t));
-            }
-
-            const desc = try mason.newBox(&.{
-                try mason.newBox(desc_divs.items, span),
-                try mason.newBox(&.{
-                    try mason.newPre("found: ", .{}),
-                    try typer.render(mason, exp.found),
-                }, span),
-            }, .{});
-
-            break :exp try mason.newBox(&.{
-                try errorDesc(mason, .type, desc),
-                try exp.loc.render(mason),
-            }, .{});
-        },
-
         .expected_matching => |exp| try mason.newBox(&.{
             try errorDesc(mason, .type, try mason.newBox(&.{
                 try mason.newPre("expected ", .{}),

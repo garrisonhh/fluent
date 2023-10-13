@@ -10,9 +10,9 @@ const Name = fluent.Name;
 const env = fluent.env;
 const typer = fluent.typer;
 
-pub const Error =
-    Allocator.Error ||
-    typer.RenderError;
+// TODO use typeclasses throughout sema for expectations
+
+pub const Error = Allocator.Error;
 
 const InvalidTypeError = error{InvalidType};
 const SemaError = Error || InvalidTypeError;
@@ -27,12 +27,6 @@ pub const SemaErrorMeta = union(enum) {
         found: Type.Id,
     };
 
-    const ExpectedOneOf = struct {
-        loc: Loc,
-        expected: []const Type.Id,
-        found: Type.Id,
-    };
-
     const ExpectedMatching = struct {
         expected: Type.Id,
         found: Type.Id,
@@ -41,12 +35,11 @@ pub const SemaErrorMeta = union(enum) {
     };
 
     expected: Expected,
-    expected_one_of: ExpectedOneOf,
     expected_matching: ExpectedMatching,
 
     pub fn deinit(self: Self, ally: Allocator) void {
+        _ = ally;
         switch (self) {
-            .expected_one_of => |exp| ally.free(exp.expected),
             else => {},
         }
     }
@@ -58,10 +51,14 @@ fn invalidType(ast: *Ast, meta: SemaErrorMeta) SemaError {
     return SemaError.InvalidType;
 }
 
-/// analyze a node and expect it to match the expected type
-fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!void {
+/// analyze a node and expect it to match or subclass the expected type
+fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!Type.Id {
     const actual = try analyzeExpr(ast, node);
-    if (!actual.eql(expected)) {
+
+    const compatible = actual.eql(expected) or
+        typer.isSubclass(actual, expected);
+
+    if (!compatible) {
         return invalidType(ast, .{
             .expected = .{
                 .loc = ast.getLoc(node),
@@ -70,28 +67,8 @@ fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!void {
             },
         });
     }
-}
 
-/// expect with multiple options
-fn expectOneOf(
-    ast: *Ast,
-    node: Ast.Node,
-    expected: []const Type.Id,
-) SemaError!Type.Id {
-    const actual = try analyzeExpr(ast, node);
-    for (expected) |t| {
-        if (actual.eql(t)) {
-            return actual;
-        }
-    } else {
-        return invalidType(ast, .{
-            .expected_one_of = .{
-                .loc = ast.getLoc(node),
-                .expected = try ast.ally.dupe(Type.Id, expected),
-                .found = actual,
-            },
-        });
-    }
+    return actual;
 }
 
 /// analyzes node and expects it to match the provided node
@@ -132,7 +109,7 @@ fn dirtyEvilHackAnalyzePredefType(
     ast: *Ast,
     node: Ast.Node,
 ) Allocator.Error!Type.Id {
-    _ = try ast.setType(node, typer.predef(.type));
+    _ = try ast.setType(node, typer.pre(.type));
 
     const value = ast.get(node).value;
     const type_name = env.get(value).name;
@@ -153,12 +130,7 @@ fn analyzeBinary(
         .divide,
         .modulus,
         => arith: {
-            const lhs_type = try expectOneOf(
-                ast,
-                meta.lhs,
-                typer.predefClass(.numbers),
-            );
-
+            const lhs_type = try expect(ast, meta.lhs, typer.pre(.number));
             _ = try expectMatching(ast, meta.rhs, meta.lhs);
 
             break :arith try ast.setType(node, lhs_type);
@@ -169,7 +141,7 @@ fn analyzeBinary(
             _ = try analyzeExpr(ast, meta.lhs);
             _ = try expectMatching(ast, meta.rhs, meta.lhs);
 
-            break :any try ast.setType(node, typer.predef(.bool));
+            break :any try ast.setType(node, typer.pre(.bool));
         },
 
         else => |op| std.debug.panic(
@@ -218,7 +190,7 @@ fn analyzeFn(
     // parameters
     var params = std.ArrayList(Type.Id).init(ally);
     defer params.deinit();
-    var param_map = Value.Function.ParamMap{};
+    var param_map = Value.FnDef.ParamMap{};
     errdefer param_map.deinit(ally);
 
     const record_entries = ast.get(meta.params).record;
@@ -257,7 +229,7 @@ fn analyzeFn(
 
     // define this function in the env
     _ = try env.put(ally, fn_name, .{
-        .function = .{
+        .fn_def = .{
             .type = func_type,
             .params = param_map,
             .ssa = null,
@@ -283,7 +255,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         .@"fn" => |meta| try analyzeFn(ast, node, meta),
 
         .@"if" => |@"if"| @"if": {
-            _ = try expect(ast, @"if".cond, typer.predef(.bool));
+            _ = try expect(ast, @"if".cond, typer.pre(.bool));
             _ = try analyzeExpr(ast, @"if".if_true);
 
             const branch_type = try expectMatching(
@@ -296,7 +268,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         },
 
         .program => |prog| prog: {
-            const prog_type = try ast.setType(node, typer.predef(.unit));
+            const prog_type = try ast.setType(node, typer.pre(.unit));
 
             for (prog) |child| {
                 _ = try analyzeExpr(ast, child);

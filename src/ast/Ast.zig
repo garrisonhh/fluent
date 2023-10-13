@@ -39,9 +39,6 @@ pub const Expr = union(enum) {
     const Self = @This();
     pub const Tag = std.meta.Tag(Self);
 
-    pub const Int = u64;
-    pub const Real = f64;
-
     pub const Unary = struct {
         op: UnaryOp,
         child: Node,
@@ -72,6 +69,7 @@ pub const Expr = union(enum) {
     };
 
     value: Value.Ref,
+    // TODO anyint + anyfloat with std.math.big numbers
     parens: Node,
     record: []const RecordEntry,
     call: []const Node,

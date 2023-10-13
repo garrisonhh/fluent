@@ -116,6 +116,13 @@ pub const namePush = names.push;
 /// drop an ident from a name (get the parent)
 pub const nameDrop = names.drop;
 
+/// name from single string
+pub fn nameFromStr(ally: Allocator, str: []const u8) Allocator.Error!Name {
+    return try name(ally, &.{
+        try ident(ally, str),
+    });
+}
+
 // rendering ===================================================================
 
 pub const renderIdent = rendering.renderIdent;

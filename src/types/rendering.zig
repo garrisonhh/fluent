@@ -11,10 +11,9 @@ const theme = struct {
     const field = blox.Color.init(.normal, .yellow);
 };
 
-const span = blox.BoxOptions{
-    .direction = .right,
-};
+const span = blox.BoxOptions{ .direction = .right };
 
+/// TODO this needs to be refactored with env typenames in mind
 pub fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.Div {
     const ally = mason.ally;
     return switch (t) {
@@ -64,6 +63,7 @@ pub fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.D
 
             break :f try mason.newBox(divs.items, span);
         },
+        .class => try mason.newPre("class", .{ .fg = theme.t }),
         .@"struct" => |st| st: {
             const comma = try mason.newPre(", ", .{});
 

@@ -57,8 +57,8 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
             },
         },
 
-        .function => |func| func: {
-            const lowered = func.ssa != null;
+        .fn_def => |fd| fd: {
+            const lowered = fd.ssa != null;
             const status = try mason.newPre(
                 if (lowered) "lowered" else "unlowered",
                 .{
@@ -69,10 +69,10 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
                 },
             );
 
-            break :func try mason.newBox(&.{
+            break :fd try mason.newBox(&.{
                 try mason.newPre("fn", .{ .fg = theme.syntax }),
                 try mason.newPre(" <", .{}),
-                try typer.render(mason, func.type),
+                try typer.render(mason, fd.type),
                 try mason.newPre("> (", .{}),
                 status,
                 try mason.newPre(")", .{}),

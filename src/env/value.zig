@@ -33,7 +33,7 @@ pub const Value = union(enum) {
         f64: f64,
     };
 
-    pub const Function = struct {
+    pub const FnDef = struct {
         pub const ParamMap = std.AutoArrayHashMapUnmanaged(Ident, Type.Id);
 
         type: Type.Id,
@@ -43,19 +43,21 @@ pub const Value = union(enum) {
     };
 
     unit,
-    name: Name,
-    type: Type.Id,
     bool: bool,
     uint: UInt,
     int: Int,
     float: Float,
-    function: Function,
+
+    // quoted only
+    type: Type.Id,
+    name: Name,
+    fn_def: FnDef,
 
     pub fn deinit(self: *Self, ally: Allocator) void {
         switch (self.*) {
             .unit, .name, .type, .bool, .uint, .int, .float => {},
-            .function => |*func| {
-                func.params.deinit(ally);
+            .fn_def => |*fd| {
+                fd.params.deinit(ally);
             },
         }
     }
@@ -65,16 +67,16 @@ pub const Value = union(enum) {
     pub fn findType(self: Self) Type.Id {
         return switch (self) {
             inline .unit, .name, .type, .bool => |_, tag| predef: {
-                const p = std.enums.nameCast(typer.PredefinedType, tag);
-                break :predef typer.predef(p);
+                const pt = std.enums.nameCast(typer.PreludeType, tag);
+                break :predef typer.pre(pt);
             },
             inline .uint, .int, .float => |num| switch (num) {
                 inline else => |_, tag| predef: {
-                    const p = std.enums.nameCast(typer.PredefinedType, tag);
-                    break :predef typer.predef(p);
+                    const pt = std.enums.nameCast(typer.PreludeType, tag);
+                    break :predef typer.pre(pt);
                 },
             },
-            .function => |f| f.type,
+            .fn_def => |fd| fd.type,
         };
     }
 
