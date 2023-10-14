@@ -121,16 +121,14 @@ pub fn setType(
     init_type: Type,
     options: AdvancedTypeOptions,
 ) Allocator.Error!Type.Id {
-    // create type
-    const t = if (options.distinct) t: {
+    if (options.distinct) {
+        // create distinct type
         try map.set(ally, this, init_type);
         try types.put(ally, .{
             .id = this,
             .type = map.get(this),
         }, {});
-
-        break :t this;
-    } else t: {
+    } else {
         const res = try types.getOrPut(ally, .{
             .id = this,
             // remember this is a dangling pointer
@@ -139,8 +137,10 @@ pub fn setType(
 
         if (res.found_existing) {
             // this type already exists
-            map.del(this);
+            map.delUnused(this);
             init_type.deinit(ally);
+
+            return res.key_ptr.id;
         } else {
             try map.set(ally, this, init_type);
             res.key_ptr.* = .{
@@ -148,15 +148,13 @@ pub fn setType(
                 .type = map.get(this),
             };
         }
-
-        break :t res.key_ptr.id;
-    };
+    }
 
     // apply top and bottom types
-    if (options.subclasses_any) try addClass(ally, t, pre(.any));
-    if (options.never_subclasses) try addClass(ally, pre(.never), t);
+    if (options.subclasses_any) try addClass(ally, this, pre(.any));
+    if (options.never_subclasses) try addClass(ally, pre(.never), this);
 
-    return t;
+    return this;
 }
 
 /// intern a type (convenient for types that can't be self referential)
