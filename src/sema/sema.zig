@@ -51,14 +51,12 @@ fn invalidType(ast: *Ast, meta: SemaErrorMeta) SemaError {
     return SemaError.InvalidType;
 }
 
+/// TODO insert implicit casts in expectations
+
 /// analyze a node and expect it to match or subclass the expected type
 fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!Type.Id {
     const actual = try analyzeExpr(ast, node);
-
-    const compatible = actual.eql(expected) or
-        typer.isSubclass(actual, expected);
-
-    if (!compatible) {
+    if (!typer.isCompatible(actual, expected)) {
         return invalidType(ast, .{
             .expected = .{
                 .loc = ast.getLoc(node),
@@ -71,6 +69,11 @@ fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!Type.Id {
     return actual;
 }
 
+// TODO `expectPeer` (peer resolution) instead of matching:
+// 1. analyze all elements with an expectation
+// 2. find the widest type (use std.sort.max with typer.isSubclass as `<`)
+// 3. ensure all types are compatible with the widest type
+
 /// analyzes node and expects it to match the provided node
 fn expectMatching(
     ast: *Ast,
@@ -79,7 +82,7 @@ fn expectMatching(
 ) SemaError!Type.Id {
     const actual = try analyzeExpr(ast, node);
     const expected = ast.getType(to_match).?;
-    if (!actual.eql(expected)) {
+    if (!typer.isCompatible(actual, expected)) {
         return invalidType(ast, .{
             .expected_matching = .{
                 .expected = expected,

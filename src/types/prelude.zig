@@ -115,6 +115,28 @@ fn defineNumber(
     try typer.addClass(ally, t, get(super));
 }
 
+fn dumpsubs(str: []const u8) void {
+    std.debug.print("[{s}]\n", .{str});
+
+    for (std.enums.values(PreludeType)) |pt| {
+        const t = map.get(pt) orelse continue;
+        std.debug.print("{s} :>", .{@tagName(pt)});
+
+        for (std.enums.values(PreludeType)) |sub_pt| {
+            const sub = map.get(sub_pt) orelse continue;
+            if (typer.isSubclass(sub, t)) {
+                std.debug.print(" {s}", .{@tagName(sub_pt)});
+            }
+        }
+
+        std.debug.print("\n", .{});
+    }
+
+    std.debug.print("\n", .{});
+
+    if (builtin.mode == .Debug) std.process.exit(1);
+}
+
 /// define all the prelude types
 pub fn init(ally: Allocator) Allocator.Error!void {
     // any + never
@@ -125,7 +147,6 @@ pub fn init(ally: Allocator) Allocator.Error!void {
     try defineEmptyClass(ally, .never, .{
         .never_subclasses = false,
     });
-    try typer.addClass(ally, get(.never), get(.any));
 
     // primitive typeclasses
     try defineEmptyClass(ally, .primitive, .{});

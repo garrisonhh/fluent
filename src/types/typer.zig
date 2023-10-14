@@ -13,12 +13,13 @@ const prelude = @import("prelude.zig");
 const fluent = @import("../mod.zig");
 
 pub const PreludeType = prelude.PreludeType;
-const SubclasserSet = std.AutoHashMapUnmanaged(Type.Id, void);
 
 /// maps id -> type + metadata; owns everything
 var map = com.RefMap(Type.Id, Type){};
 /// set of type/id pairs
 var types = TypeSet{};
+
+const SubclasserSet = std.ArrayListUnmanaged(Type.Id);
 /// maps type -> set of subclassers of the type
 var graph = std.AutoHashMapUnmanaged(Type.Id, SubclasserSet){};
 
@@ -61,6 +62,9 @@ pub fn addClass(
     t: Type.Id,
     super: Type.Id,
 ) Allocator.Error!void {
+    // don't create loops in the DAG
+    std.debug.assert(!isCompatible(t, super));
+
     // get the type set for super, or create it if it doesn't exist
     const res = try graph.getOrPut(ally, super);
     if (!res.found_existing) {
@@ -68,30 +72,34 @@ pub fn addClass(
     }
     const set = res.value_ptr;
 
-    // add subclasser and subclasser's subclassers
-    // the class lists should always be flat, so I don't have to do this
-    // recursively
-    try set.put(ally, t, {});
-
-    if (graph.getPtr(t)) |subset| {
-        var subs = subset.keyIterator();
-        while (subs.next()) |sub| {
-            try set.put(ally, sub.*, {});
-        }
-    }
+    try set.append(ally, t);
 }
 
 pub fn isSubclass(t: Type.Id, super: Type.Id) bool {
     const set = graph.getPtr(super) orelse {
-        std.debug.assert(super.eql(pre(.never)));
         return false;
     };
 
-    // class lists are always flat, so this doesn't have to be recursive
-    return set.contains(t);
+    // check direct containment
+    for (set.items) |elem| {
+        if (t.eql(elem)) return true;
+    }
+
+    // check recursive containment
+    for (set.items) |elem| {
+        if (isSubclass(t, elem)) return true;
+    }
+
+    return false;
+}
+
+/// if inner is narrower or equal to outer
+pub fn isCompatible(inner: Type.Id, outer: Type.Id) bool {
+    return inner.eql(outer) or isSubclass(inner, outer);
 }
 
 pub const AdvancedTypeOptions = struct {
+    distinct: bool = true,
     subclasses_any: bool = true,
     never_subclasses: bool = true,
 };
@@ -114,24 +122,35 @@ pub fn setType(
     options: AdvancedTypeOptions,
 ) Allocator.Error!Type.Id {
     // create type
-    const res = try types.getOrPut(ally, .{
-        .id = this,
-        // remember this is a dangling pointer
-        .type = &init_type,
-    });
-
-    if (res.found_existing) {
-        // this type already exists
-        init_type.deinit(ally);
-    } else {
+    const t = if (options.distinct) t: {
         try map.set(ally, this, init_type);
-        res.key_ptr.* = .{
+        try types.put(ally, .{
             .id = this,
             .type = map.get(this),
-        };
-    }
+        }, {});
 
-    const t = res.key_ptr.id;
+        break :t this;
+    } else t: {
+        const res = try types.getOrPut(ally, .{
+            .id = this,
+            // remember this is a dangling pointer
+            .type = &init_type,
+        });
+
+        if (res.found_existing) {
+            // this type already exists
+            map.del(this);
+            init_type.deinit(ally);
+        } else {
+            try map.set(ally, this, init_type);
+            res.key_ptr.* = .{
+                .id = this,
+                .type = map.get(this),
+            };
+        }
+
+        break :t res.key_ptr.id;
+    };
 
     // apply top and bottom types
     if (options.subclasses_any) try addClass(ally, t, pre(.any));
@@ -140,11 +159,14 @@ pub fn setType(
     return t;
 }
 
-/// create a type (convenient for types that can't be self referential)
+/// intern a type (convenient for types that can't be self referential)
+/// defaults to indistinct types
 ///
 /// *type ownership is moved on calling this*
 pub fn put(ally: Allocator, t: Type) Allocator.Error!Type.Id {
-    return try putAdvanced(ally, t, .{});
+    return try putAdvanced(ally, t, .{
+        .distinct = false,
+    });
 }
 
 /// create a type (convenient for types that can't be self referential)
