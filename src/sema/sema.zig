@@ -228,7 +228,6 @@ fn analyzeFn(
             .returns = return_type,
         },
     });
-    _ = try ast.setType(node, func_type);
 
     // define this function in the env
     _ = try env.put(ally, fn_name, .{
@@ -239,7 +238,7 @@ fn analyzeFn(
         },
     });
 
-    return func_type;
+    return try ast.setType(node, typer.pre(.unit));
 }
 
 fn analyzeValue(ast: *Ast, node: Ast.Node, ref: Value.Ref) SemaError!Type.Id {
@@ -274,7 +273,7 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
             const prog_type = try ast.setType(node, typer.pre(.unit));
 
             for (prog) |child| {
-                _ = try analyzeExpr(ast, child);
+                _ = try expect(ast, child, typer.pre(.unit));
             }
 
             break :prog prog_type;
