@@ -62,7 +62,7 @@ pub fn init(ally: Allocator) Allocator.Error!void {
 
 pub fn deinit(ally: Allocator) void {
     sources.deinit(ally);
-    env.deinit(ally);
+    env.deinit();
     typer.deinit(ally);
 }
 

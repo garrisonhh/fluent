@@ -53,8 +53,8 @@ fn put(
     const t = try typer.putAdvanced(ally, init_type, options);
     map.put(pt, t);
 
-    const name = try env.nameFromStr(ally, @tagName(pt));
-    _ = try env.put(ally, name, .{ .type = t });
+    const name = try env.nameFromStr(@tagName(pt));
+    _ = try env.put(name, .{ .type = t });
 
     return t;
 }
@@ -186,7 +186,7 @@ pub fn init(ally: Allocator) Allocator.Error!void {
                 std.debug.panic("forgot to define {}", .{pt});
             }
 
-            const name = try env.nameFromStr(ally, @tagName(pt));
+            const name = try env.nameFromStr(@tagName(pt));
             if (env.lookup(name) == null) {
                 std.debug.panic("forgot to add {} to env", .{pt});
             }

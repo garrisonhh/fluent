@@ -152,7 +152,7 @@ pub fn new(self: *Ast, loc: Loc, expr: Expr) Allocator.Error!Node {
 /// convenience function for creating a value expr
 pub fn newValue(self: *Ast, loc: Loc, value: Value) Allocator.Error!Node {
     return try self.new(loc, .{
-        .value = try env.value(self.ally, value),
+        .value = try env.value(value),
     });
 }
 

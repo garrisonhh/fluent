@@ -230,7 +230,7 @@ fn analyzeFn(
     });
 
     // define this function in the env
-    _ = try env.put(ally, fn_name, .{
+    _ = try env.put(fn_name, .{
         .fn_def = .{
             .type = func_type,
             .params = param_map,

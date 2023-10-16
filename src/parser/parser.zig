@@ -408,8 +408,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
         // atomic tokens
         .ident => ident: {
-            const ident = try env.ident(ally, lexer.slice(pk));
-            const name = try env.name(ally, &.{ident});
+            const name = try env.nameFromStr(lexer.slice(pk));
 
             lexer.accept(pk);
             break :ident try ast.newValue(pk.loc, .{ .name = name });
