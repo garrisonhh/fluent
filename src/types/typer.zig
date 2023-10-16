@@ -1,7 +1,5 @@
 //! type system manager
 
-// TODO make this managed, similar to env
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
@@ -14,6 +12,9 @@ const fluent = @import("../mod.zig");
 
 pub const PreludeType = prelude.PreludeType;
 
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const ally = gpa.allocator();
+
 /// maps id -> type + metadata; owns everything
 var map = com.RefMap(Type.Id, Type){};
 /// set of type/id pairs
@@ -23,11 +24,11 @@ const SubclasserSet = std.ArrayListUnmanaged(Type.Id);
 /// maps type -> set of subclassers of the type
 var graph = std.AutoHashMapUnmanaged(Type.Id, SubclasserSet){};
 
-pub fn init(ally: Allocator) Allocator.Error!void {
-    try prelude.init(ally);
+pub fn init() Allocator.Error!void {
+    try prelude.init();
 }
 
-pub fn deinit(ally: Allocator) void {
+pub fn deinit() void {
     types.deinit(ally);
 
     var iter = map.iterator();
@@ -40,8 +41,11 @@ pub fn deinit(ally: Allocator) void {
 
     prelude.deinit(ally);
 
+    _ = gpa.deinit();
+
     // reset for tests
     if (builtin.is_test) {
+        gpa = .{};
         map = .{};
         types = .{};
         graph = .{};
@@ -57,11 +61,7 @@ pub fn pre(pt: PreludeType) Type.Id {
 }
 
 /// mark a type as a subclass of another type
-pub fn addClass(
-    ally: Allocator,
-    t: Type.Id,
-    super: Type.Id,
-) Allocator.Error!void {
+pub fn addClass(t: Type.Id, super: Type.Id) Allocator.Error!void {
     // don't create loops in the DAG
     std.debug.assert(!isCompatible(t, super));
 
@@ -107,23 +107,22 @@ pub const AdvancedTypeOptions = struct {
 /// creates an invalid type id for potentially self-referential types
 ///
 /// *you must call `setSelfRef` on the id before it is accessed*
-pub fn newType(ally: Allocator) Allocator.Error!Type.Id {
+pub fn newType() Allocator.Error!Type.Id {
     return try map.new(ally);
 }
 
 /// store a possibly self-referential type with a `this` id created using
 /// `newSelfRef`, returning the intern'd type id
-///
-/// *type ownership is moved on calling this*
 pub fn setType(
-    ally: Allocator,
     this: Type.Id,
     init_type: Type,
     options: AdvancedTypeOptions,
 ) Allocator.Error!Type.Id {
     if (options.distinct) {
         // create distinct type
-        try map.set(ally, this, init_type);
+        const t = try init_type.clone(ally);
+
+        try map.set(ally, this, t);
         try types.put(ally, .{
             .id = this,
             .type = map.get(this),
@@ -138,11 +137,12 @@ pub fn setType(
         if (res.found_existing) {
             // this type already exists
             map.delUnused(this);
-            init_type.deinit(ally);
 
             return res.key_ptr.id;
         } else {
-            try map.set(ally, this, init_type);
+            const t = try init_type.clone(ally);
+
+            try map.set(ally, this, t);
             res.key_ptr.* = .{
                 .id = this,
                 .type = map.get(this),
@@ -151,32 +151,26 @@ pub fn setType(
     }
 
     // apply top and bottom types
-    if (options.subclasses_any) try addClass(ally, this, pre(.any));
-    if (options.never_subclasses) try addClass(ally, pre(.never), this);
+    if (options.subclasses_any) try addClass(this, pre(.any));
+    if (options.never_subclasses) try addClass(pre(.never), this);
 
     return this;
 }
 
 /// intern a type (convenient for types that can't be self referential)
 /// defaults to indistinct types
-///
-/// *type ownership is moved on calling this*
-pub fn put(ally: Allocator, t: Type) Allocator.Error!Type.Id {
-    return try putAdvanced(ally, t, .{
+pub fn put(t: Type) Allocator.Error!Type.Id {
+    return try putAdvanced(t, .{
         .distinct = false,
     });
 }
 
 /// create a type (convenient for types that can't be self referential)
-///
-/// *type ownership is moved on calling this*
 pub fn putAdvanced(
-    ally: Allocator,
     t: Type,
     options: AdvancedTypeOptions,
 ) Allocator.Error!Type.Id {
-    errdefer t.deinit(ally);
-    return try setType(ally, try newType(ally), t, options);
+    return try setType(try newType(), t, options);
 }
 
 pub fn get(id: Type.Id) *const Type {
@@ -191,7 +185,6 @@ fn dumpTypeImpl(t: Type, this: Type.Id) !void {
     }
 
     const blox = @import("blox");
-    const ally = std.heap.page_allocator;
     const stderr = std.io.getStdErr().writer();
 
     var mason = blox.Mason.init(ally);

@@ -42,6 +42,8 @@ const options = @import("options");
 const blox = @import("blox");
 
 pub fn init(ally: Allocator) Allocator.Error!void {
+    _ = ally;
+
     // log options if requested
     if (options.log_options) {
         const logger = std.log.scoped(.options);
@@ -56,14 +58,14 @@ pub fn init(ally: Allocator) Allocator.Error!void {
     }
 
     // call init functions
-    try typer.init(ally);
+    try typer.init();
     env.init();
 }
 
 pub fn deinit(ally: Allocator) void {
     sources.deinit(ally);
     env.deinit();
-    typer.deinit(ally);
+    typer.deinit();
 }
 
 /// put this in root!

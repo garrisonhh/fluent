@@ -45,12 +45,11 @@ pub const PreludeType = enum {
 
 /// add the prelude type to typer, prelude map, and env all at once
 fn put(
-    ally: Allocator,
     pt: PreludeType,
     init_type: Type,
     options: typer.AdvancedTypeOptions,
 ) Allocator.Error!Type.Id {
-    const t = try typer.putAdvanced(ally, init_type, options);
+    const t = try typer.putAdvanced(init_type, options);
     map.put(pt, t);
 
     const name = try env.nameFromStr(@tagName(pt));
@@ -60,31 +59,26 @@ fn put(
 }
 
 fn defineEmptyClass(
-    ally: Allocator,
     pt: PreludeType,
     options: typer.AdvancedTypeOptions,
 ) Allocator.Error!void {
     const init_type = Type{
-        .class = .{
-            .members = try ally.alloc(Type.Class.Member, 0),
-        },
+        .class = .{ .members = &.{} },
     };
 
-    _ = try put(ally, pt, init_type, options);
+    _ = try put(pt, init_type, options);
 }
 
 fn defineBasic(
-    ally: Allocator,
     pt: PreludeType,
     init_type: Type,
     super: PreludeType,
 ) Allocator.Error!void {
-    const t = try put(ally, pt, init_type, .{});
-    try typer.addClass(ally, t, get(super));
+    const t = try put(pt, init_type, .{});
+    try typer.addClass(t, get(super));
 }
 
 fn defineNumber(
-    ally: Allocator,
     pt: PreludeType,
     super: PreludeType,
 ) Allocator.Error!void {
@@ -111,8 +105,8 @@ fn defineNumber(
         else => unreachable,
     };
 
-    const t = try put(ally, pt, init_type, .{});
-    try typer.addClass(ally, t, get(super));
+    const t = try put(pt, init_type, .{});
+    try typer.addClass(t, get(super));
 }
 
 fn dumpsubs(str: []const u8) void {
@@ -138,46 +132,46 @@ fn dumpsubs(str: []const u8) void {
 }
 
 /// define all the prelude types
-pub fn init(ally: Allocator) Allocator.Error!void {
+pub fn init() Allocator.Error!void {
     // any + never
-    try defineEmptyClass(ally, .any, .{
+    try defineEmptyClass(.any, .{
         .subclasses_any = false,
         .never_subclasses = false,
     });
-    try defineEmptyClass(ally, .never, .{
+    try defineEmptyClass(.never, .{
         .never_subclasses = false,
     });
 
     // primitive typeclasses
-    try defineEmptyClass(ally, .primitive, .{});
-    try defineEmptyClass(ally, .number, .{});
-    try defineEmptyClass(ally, .uint, .{});
-    try defineEmptyClass(ally, .int, .{});
-    try defineEmptyClass(ally, .float, .{});
-    try typer.addClass(ally, get(.number), get(.primitive));
-    try typer.addClass(ally, get(.uint), get(.number));
-    try typer.addClass(ally, get(.int), get(.number));
-    try typer.addClass(ally, get(.float), get(.number));
+    try defineEmptyClass(.primitive, .{});
+    try defineEmptyClass(.number, .{});
+    try defineEmptyClass(.uint, .{});
+    try defineEmptyClass(.int, .{});
+    try defineEmptyClass(.float, .{});
+    try typer.addClass(get(.number), get(.primitive));
+    try typer.addClass(get(.uint), get(.number));
+    try typer.addClass(get(.int), get(.number));
+    try typer.addClass(get(.float), get(.number));
 
     // primitives
-    try defineBasic(ally, .unit, .unit, .primitive);
-    try defineBasic(ally, .type, .type, .primitive);
-    try defineBasic(ally, .name, .name, .primitive);
-    try defineBasic(ally, .bool, .bool, .primitive);
+    try defineBasic(.unit, .unit, .primitive);
+    try defineBasic(.type, .type, .primitive);
+    try defineBasic(.name, .name, .primitive);
+    try defineBasic(.bool, .bool, .primitive);
 
     // number primitives
-    try defineNumber(ally, .u64, .uint);
-    try defineNumber(ally, .u32, .u64);
-    try defineNumber(ally, .u16, .u32);
-    try defineNumber(ally, .u8, .u16);
+    try defineNumber(.u64, .uint);
+    try defineNumber(.u32, .u64);
+    try defineNumber(.u16, .u32);
+    try defineNumber(.u8, .u16);
 
-    try defineNumber(ally, .i64, .int);
-    try defineNumber(ally, .i32, .i64);
-    try defineNumber(ally, .i16, .i32);
-    try defineNumber(ally, .i8, .i16);
+    try defineNumber(.i64, .int);
+    try defineNumber(.i32, .i64);
+    try defineNumber(.i16, .i32);
+    try defineNumber(.i8, .i16);
 
-    try defineNumber(ally, .f64, .float);
-    try defineNumber(ally, .f32, .f64);
+    try defineNumber(.f64, .float);
+    try defineNumber(.f32, .f64);
 
     // verify
     if (builtin.mode == .Debug) {

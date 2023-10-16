@@ -208,8 +208,8 @@ fn analyzeFn(
         try param_map.put(ally, pname_ident, param_type);
     }
 
-    const params_type = try typer.put(ally, .{
-        .@"struct" = .{ .fields = try params.toOwnedSlice() },
+    const params_type = try typer.put(.{
+        .@"struct" = .{ .fields = params.items },
     });
 
     _ = try ast.setType(meta.params, params_type);
@@ -222,9 +222,9 @@ fn analyzeFn(
 
     const param_fields = typer.get(params_type).@"struct".fields;
 
-    const func_type = try typer.put(ally, .{
+    const func_type = try typer.put(.{
         .@"fn" = .{
-            .params = try ally.dupe(Type.Id, param_fields),
+            .params = param_fields,
             .returns = return_type,
         },
     });

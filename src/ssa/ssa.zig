@@ -195,7 +195,7 @@ pub const FuncBuilder = struct {
 
         const returns = self.locals.get(entry_block.ret).*;
 
-        const func_type = try fluent.typer.put(ally, .{
+        const func_type = try fluent.typer.put(.{
             .@"fn" = .{
                 .params = params,
                 .returns = returns,
