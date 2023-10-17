@@ -12,8 +12,6 @@ const Name = names.Name;
 const Value = @import("value.zig").Value;
 const rendering = @import("rendering.zig");
 
-// TODO env should probably just be managed
-
 // TODO I'm using this pattern a lot, maybe I should impl a 2-way hashmap in
 // common
 const DefMap = std.AutoHashMapUnmanaged(Name, Value.Ref);
@@ -104,9 +102,6 @@ pub fn reverseLookup(ref: Value.Ref) ?Name {
 }
 
 // ident/name behavior =========================================================
-
-// TODO this interface is meh, I can make it more usable when I make env
-// memory managed
 
 /// intern an ident
 pub fn ident(str: []const u8) Allocator.Error!Ident {

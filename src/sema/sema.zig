@@ -10,8 +10,6 @@ const Name = fluent.Name;
 const env = fluent.env;
 const typer = fluent.typer;
 
-// TODO use typeclasses throughout sema for expectations
-
 pub const Error = Allocator.Error;
 
 const InvalidTypeError = error{InvalidType};
@@ -50,8 +48,6 @@ fn invalidType(ast: *Ast, meta: SemaErrorMeta) SemaError {
     try ast.addError(.{ .semantic = meta });
     return SemaError.InvalidType;
 }
-
-/// TODO insert implicit casts in expectations
 
 /// analyze a node and expect it to match or subclass the expected type
 fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!Type.Id {
@@ -216,9 +212,8 @@ fn analyzeFn(
 
     // collect fn type
     const return_type = try dirtyEvilHackAnalyzePredefType(ast, meta.returns);
-    const body_type = try analyzeExpr(ast, meta.body);
-
-    _ = body_type; // TODO constrain this node with the return type
+    const body_type = try expect(ast, meta.body, return_type);
+    _ = body_type;
 
     const param_fields = typer.get(params_type).@"struct".fields;
 

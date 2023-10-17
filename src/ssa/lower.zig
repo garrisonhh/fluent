@@ -16,8 +16,6 @@ fn lowerTopLevelExpr(
 ) Error!void {
     switch (ast.get(node).*) {
         .let => |let| {
-            // TODO how should name bindings work?
-
             // TODO execute the body as code?
 
             // functions
