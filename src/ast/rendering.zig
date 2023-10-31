@@ -189,6 +189,15 @@ fn renderFieldData(
 ) RenderError!blox.Div {
     const ally = mason.ally;
     return switch (T) {
+        // literals
+        void => try mason.newPre("()", .{ .fg = theme.data }),
+        bool => try mason.newPre(
+            if (value) "true" else "false",
+            .{ .fg = theme.data },
+        ),
+        Ast.Expr.Number => try mason.newPre(value.str, .{ .fg = theme.data }),
+        fluent.Ident =>  fluent.env.renderIdent(mason, value),
+
         // enums
         Ast.UnaryOp,
         Ast.BinaryOp,
@@ -249,7 +258,7 @@ pub fn render(
     const ally = mason.ally;
     const expr = self.get(node).*;
 
-    const typing = if (self.getType(node)) |t|
+    const typing = if (self.getTypeOpt(node)) |t|
         try typer.render(mason, t)
     else
         try mason.newPre("untyped", .{ .fg = theme.err });
@@ -264,7 +273,11 @@ pub fn render(
     }, span);
 
     return switch (expr) {
-        .value => |v| try fluent.env.renderValue(mason, v),
+        inline .unit,
+        .bool,
+        .number,
+        .ident,
+        => |data| try renderFieldData(self, mason, @TypeOf(data), data),
 
         inline .parens,
         .record,

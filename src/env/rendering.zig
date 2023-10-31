@@ -58,13 +58,12 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
         },
 
         .fn_def => |fd| fd: {
-            const lowered = fd.ssa != null;
             const status = try mason.newPre(
-                if (lowered) "lowered" else "unlowered",
+                @tagName(fd.ssa),
                 .{
                     .fg = blox.Color.init(
                         .normal,
-                        if (lowered) .green else .red,
+                        if (fd.ssa == .compiled) .green else .red,
                     ),
                 },
             );

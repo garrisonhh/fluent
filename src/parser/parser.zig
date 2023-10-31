@@ -7,7 +7,6 @@ const Loc = fluent.Loc;
 const env = fluent.env;
 const Lexer = @import("Lexer.zig");
 const Token = Lexer.Token;
-const literals = @import("literals.zig");
 
 pub const Error =
     Allocator.Error ||
@@ -408,33 +407,21 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
         // atomic tokens
         .ident => ident: {
-            const name = try env.nameFromStr(lexer.slice(pk));
+            const ident = try env.ident(lexer.slice(pk));
 
             lexer.accept(pk);
-            break :ident try ast.newValue(pk.loc, .{ .name = name });
+            break :ident try ast.new(pk.loc, .{ .ident = ident });
         },
-        .int => int: {
-            const text = lexer.slice(pk);
-            const n = literals.parseDecimalInt(text) catch {
-                break :int errorInvalidLiteral(ast, pk);
-            };
+        .int, .real => num: {
+            const number = Ast.Expr.Number{ .str = lexer.slice(pk) };
 
             lexer.accept(pk);
-            break :int try ast.newValue(pk.loc, .{ .uint = .{ .u64 = n } });
-        },
-        .real => real: {
-            const text = lexer.slice(pk);
-            const n = literals.parseDecimalReal(text) catch {
-                break :real errorInvalidLiteral(ast, pk);
-            };
-
-            lexer.accept(pk);
-            break :real try ast.newValue(pk.loc, .{ .float = .{ .f64 = n } });
+            break :num try ast.new(pk.loc, .{ .number = number });
         },
         inline .true, .false => |tag| bool: {
             const value = comptime tag == .true;
             lexer.accept(pk);
-            break :bool try ast.newValue(pk.loc, .{ .bool = value });
+            break :bool try ast.new(pk.loc, .{ .bool = value });
         },
 
         // parens
@@ -447,7 +434,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
             };
             if (pk2.tag == .rparen) {
                 lexer.accept(pk2);
-                break :parens try ast.newValue(pk.loc, .unit);
+                break :parens try ast.new(pk.loc, .unit);
             }
 
             // wrapped expr

@@ -45,10 +45,6 @@ var names = com.RefMap(Name, []const Ident){};
 var set = HashMapUnmanaged{};
 
 pub fn init() void {
-    if (builtin.is_test) {
-        names = .{};
-        set = .{};
-    }
 }
 
 pub fn deinit(ally: Allocator) void {
@@ -57,6 +53,11 @@ pub fn deinit(ally: Allocator) void {
     var name_iter = names.iterator();
     while (name_iter.next()) |name_str| ally.free(name_str.*);
     names.deinit(ally);
+
+    if (builtin.is_test) {
+        names = .{};
+        set = .{};
+    }
 }
 
 /// get the slice for the name

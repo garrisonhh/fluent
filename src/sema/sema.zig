@@ -77,7 +77,7 @@ fn expectMatching(
     to_match: Ast.Node,
 ) SemaError!Type.Id {
     const actual = try analyzeExpr(ast, node);
-    const expected = ast.getType(to_match).?;
+    const expected = ast.getTypeOpt(to_match).?;
     if (!typer.isCompatible(actual, expected)) {
         return invalidType(ast, .{
             .expected_matching = .{
@@ -110,8 +110,8 @@ fn dirtyEvilHackAnalyzePredefType(
 ) Allocator.Error!Type.Id {
     _ = try ast.setType(node, typer.pre(.type));
 
-    const value = ast.get(node).value;
-    const type_name = env.get(value).name;
+    const type_ident = ast.get(node).ident;
+    const type_name = try env.name(&.{type_ident});
     const type_value = env.lookup(type_name).?;
     return env.get(type_value).type;
 }
@@ -183,8 +183,8 @@ fn analyzeFn(
 
     // name
     // TODO contextual namespace for this name
-    const fn_name_value = ast.get(meta.name).value;
-    const fn_name = env.get(fn_name_value).name;
+    const fn_name_ident = ast.get(meta.name).ident;
+    const fn_name = try env.name(&.{fn_name_ident});
 
     // parameters
     var params = std.ArrayList(Type.Id).init(ally);
@@ -197,10 +197,7 @@ fn analyzeFn(
         const param_type = try dirtyEvilHackAnalyzePredefType(ast, entry.value);
         try params.append(param_type);
 
-        // ew
-        const pname_value = ast.get(entry.key).value;
-        const pname_name = env.get(pname_value).name;
-        const pname_ident = env.nameSlice(pname_name)[0];
+        const pname_ident = ast.get(entry.key).ident;
         try param_map.put(ally, pname_ident, param_type);
     }
 
@@ -229,22 +226,21 @@ fn analyzeFn(
         .fn_def = .{
             .type = func_type,
             .params = param_map,
-            .ssa = null,
+            .ssa = .uncompiled,
         },
     });
 
     return try ast.setType(node, typer.pre(.unit));
 }
 
-fn analyzeValue(ast: *Ast, node: Ast.Node, ref: Value.Ref) SemaError!Type.Id {
-    const t = env.get(ref).findType();
-    return try ast.setType(node, t);
-}
-
 /// dispatch for analysis
 fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
     return switch (ast.get(node).*) {
-        .value => |ref| try analyzeValue(ast, node, ref),
+        .unit => try ast.setType(node, typer.pre(.unit)),
+        .bool => try ast.setType(node, typer.pre(.bool)),
+        .number => @panic("TODO analyze number"),
+        .ident => @panic("TODO analyze ident"),
+
         .unary => |meta| try analyzeUnary(ast, node, meta),
         .binary => |meta| try analyzeBinary(ast, node, meta),
         .record => |entries| try analyzeRecord(ast, node, entries),

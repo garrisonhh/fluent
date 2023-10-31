@@ -3,11 +3,23 @@ const Allocator = std.mem.Allocator;
 const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
 const Name = fluent.Name;
+const Type = fluent.Type;
 const env = fluent.env;
 const ssa = fluent.ssa;
 const typer = fluent.typer;
 
 pub const Error = Allocator.Error;
+
+/// sugar for creating a value ref and lowering it as a constant op
+fn lowerConstant(
+    block: *ssa.BlockBuilder,
+    t: Type.Id,
+    init_value: fluent.Value,
+) Error!ssa.Local {
+    return try block.op(t, .{
+        .constant = try env.value(init_value),
+    });
+}
 
 fn lowerTopLevelExpr(
     ast: *const Ast,
@@ -60,7 +72,7 @@ fn lowerFunction(
     var func = try prog.func(name);
 
     // compile entry block
-    const params_type = ast.getType(params).?;
+    const params_type = ast.getTypeOpt(params).?;
     const param_types = typer.get(params_type).@"struct".fields;
     for (param_types) |param_type| {
         _ = try func.param(param_type);
@@ -71,8 +83,10 @@ fn lowerFunction(
     // build + update env entry
     try func.build(entry);
 
-    const func_value = env.lookup(name).?;
-    env.getMut(func_value).fn_def.ssa = func.ref;
+    const func_value_ref = env.lookup(name).?;
+    const func_value = env.getMut(func_value_ref);
+    std.debug.assert(func_value.fn_def.ssa == .uncompiled);
+    func_value.fn_def.ssa = .{ .compiled = func.ref };
 
     return func.ref;
 }
@@ -85,9 +99,12 @@ fn lowerExpr(
 ) Error!ssa.Local {
     const func = block.func;
 
-    const t = ast.getType(node).?;
+    const t = ast.getType(node);
     return switch (ast.get(node).*) {
-        .value => |ref| try block.op(t, .{ .constant = ref }),
+        .unit => try lowerConstant(block, t, .unit),
+        .bool => |b| try lowerConstant(block, t, .{ .bool = b }),
+        .number => @panic("TODO lower number"),
+        .ident => @panic("TODO lower ident"),
 
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
@@ -144,13 +161,13 @@ pub fn lower(
         switch (ast.get(decl).*) {
             .@"fn" => |@"fn"| {
                 // TODO eval this; this is a dirty evil hack
-                const value = ast.get(@"fn".name).value;
-                const name = env.get(value).name;
+                const fn_name_ident = ast.get(@"fn".name).ident;
+                const fn_name = try env.name(&.{fn_name_ident});
 
                 _ = try lowerFunction(
                     ast,
                     program,
-                    name,
+                    fn_name,
                     @"fn".params,
                     @"fn".body,
                 );

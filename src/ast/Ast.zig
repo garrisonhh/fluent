@@ -6,11 +6,11 @@ const builtin = @import("builtin");
 const com = @import("common");
 const blox = @import("blox");
 const rendering = @import("rendering.zig");
+const literals = @import("literals.zig");
 const fluent = @import("../mod.zig");
 const Loc = fluent.Loc;
+const Ident = fluent.Ident;
 const Type = fluent.Type;
-const Value = fluent.Value;
-const env = fluent.env;
 
 pub const Error = @import("error.zig").Error;
 
@@ -38,6 +38,8 @@ pub const BinaryOp = enum {
 pub const Expr = union(enum) {
     const Self = @This();
     pub const Tag = std.meta.Tag(Self);
+
+    pub const Number = literals.Number;
 
     pub const Unary = struct {
         op: UnaryOp,
@@ -68,8 +70,10 @@ pub const Expr = union(enum) {
         if_false: Node,
     };
 
-    value: Value.Ref,
-    // TODO anyint + anyfloat with std.math.big numbers
+    unit,
+    bool: bool,
+    number: Number,
+    ident: Ident,
     parens: Node,
     record: []const RecordEntry,
     call: []const Node,
@@ -81,7 +85,10 @@ pub const Expr = union(enum) {
 
     fn deinit(self: Self, ally: Allocator) void {
         switch (self) {
-            .value,
+            .unit,
+            .bool,
+            .number,
+            .ident,
             .parens,
             .unary,
             .binary,
@@ -149,13 +156,6 @@ pub fn new(self: *Ast, loc: Loc, expr: Expr) Allocator.Error!Node {
     return node;
 }
 
-/// convenience function for creating a value expr
-pub fn newValue(self: *Ast, loc: Loc, value: Value) Allocator.Error!Node {
-    return try self.new(loc, .{
-        .value = try env.value(value),
-    });
-}
-
 pub fn get(self: *const Ast, node: Node) *const Expr {
     return self.map.get(node);
 }
@@ -170,18 +170,22 @@ pub fn setType(self: *Ast, node: Node, t: Type.Id) Allocator.Error!Type.Id {
     return t;
 }
 
-pub fn getType(self: *const Ast, node: Node) ?Type.Id {
+pub fn getTypeOpt(self: *const Ast, node: Node) ?Type.Id {
     return self.types.get(node);
+}
+
+pub fn getType(self: *const Ast, node: Node) Type.Id {
+    return self.getTypeOpt(node).?;
 }
 
 fn exprDataEql(self: *const Ast, a: anytype, b: @TypeOf(a)) bool {
     return switch (@TypeOf(a, b)) {
         void => true,
-
-        bool, Expr.Int, Expr.Real => a == b,
+        bool => a == b,
+        Expr.Number => @panic("TODO Expr.Number eql"),
+        Ident => a.eql(b),
 
         Node => self.eql(a, b),
-
         []const Node => arr: {
             if (a.len != b.len) {
                 break :arr false;

@@ -36,10 +36,14 @@ pub const Value = union(enum) {
     pub const FnDef = struct {
         pub const ParamMap = std.AutoArrayHashMapUnmanaged(Ident, Type.Id);
 
+        pub const Ssa = union(enum) {
+            uncompiled,
+            compiled: fluent.ssa.Func.Ref,
+        };
+
         type: Type.Id,
         params: ParamMap,
-        /// null if this function hasn't yet been compiled
-        ssa: ?fluent.ssa.Func.Ref,
+        ssa: Ssa,
     };
 
     unit,

@@ -10,10 +10,6 @@ var idents = com.RefMap(Ident, []const u8){};
 var set = std.StringHashMapUnmanaged(Ident){};
 
 pub fn init() void {
-    if (builtin.is_test) {
-        idents = .{};
-        set = .{};
-    }
 }
 
 pub fn deinit(ally: Allocator) void {
@@ -22,6 +18,11 @@ pub fn deinit(ally: Allocator) void {
     var ident_iter = idents.iterator();
     while (ident_iter.next()) |ident_str| ally.free(ident_str.*);
     idents.deinit(ally);
+
+    if (builtin.is_test) {
+        idents = .{};
+        set = .{};
+    }
 }
 
 /// get the string for the ident
