@@ -112,13 +112,13 @@ pub const Number = struct {
                     trav = trav[1..];
 
                     var fract: T = 0;
-                    var fract_base: T = 1.0;
+                    var fract_base: T = -1;
                     for (trav) |ch| {
                         if (ch == '_') continue;
                         const digit = try parseDigit(T, ch, radix);
 
-                        fract_base *= 0.1;
-                        fract += digit * fract_base;
+                        fract += digit * std.math.pow(T, radix, fract_base);
+                        fract_base -= 1;
                     }
 
                     n += fract;
@@ -179,8 +179,8 @@ test "parse Number into f64" {
                 std.debug.print("fail: {} \"{s}\"\n", .{n, str});
                 return e;
             };
-            // NOTE this should be exact, but it's good enough for now
-            try std.testing.expectApproxEqRel(n, out, 1e-9);
+            // NOTE this should be perfect, but it's good enough for now
+            try std.testing.expectApproxEqRel(n, out, 1e-15);
         }
     }
 }
