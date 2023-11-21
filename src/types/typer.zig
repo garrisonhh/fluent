@@ -22,6 +22,8 @@ var types = TypeSet{};
 
 const SubclasserSet = std.ArrayListUnmanaged(Type.Id);
 /// maps type -> set of subclassers of the type
+/// TODO this will also need to map the other way. maybe I need a better way
+/// to represent this
 var graph = std.AutoHashMapUnmanaged(Type.Id, SubclasserSet){};
 
 pub fn init() Allocator.Error!void {
@@ -91,12 +93,47 @@ pub fn isSubclass(t: Type.Id, super: Type.Id) bool {
         if (isSubclass(t, elem)) return true;
     }
 
+    // TODO check for compatible/equivalent classes
+
     return false;
 }
 
 /// if inner is narrower or equal to outer
 pub fn isCompatible(inner: Type.Id, outer: Type.Id) bool {
     return inner.eql(outer) or isSubclass(inner, outer);
+}
+
+/// create a typeclass which is the union of two types, either or both of which
+/// may also be typeclasses
+pub fn mergePair(a: Type.Id, b: Type.Id) Allocator.Error!Type.Id {
+    // directional compatibility
+    if (isCompatible(a, b)) {
+        return a;
+    } else if (isSubclass(b, a)) {
+        return b;
+    }
+
+    // must merge
+    const merged = try put(.{ .class = .{ .members = &.{} } });
+
+    try addClass(a, merged);
+    try addClass(b, merged);
+
+    return merged;
+}
+
+/// merges the types of some number of nodes
+pub fn merge(ts: []const Type.Id) Allocator.Error!Type.Id {
+    if (ts.len == 0) {
+        return pre(.never);
+    }
+
+    var merged = ts[0];
+    for (ts[1..]) |t| {
+        merged = try mergePair(merged, t);
+    }
+
+    return merged;
 }
 
 pub const AdvancedTypeOptions = struct {
@@ -114,6 +151,7 @@ pub fn newType() Allocator.Error!Type.Id {
 
 /// store a possibly self-referential type with a `this` id created using
 /// `newSelfRef`, returning the intern'd type id
+/// TODO automagically correct the type graph
 pub fn setType(
     this: Type.Id,
     init_type: Type,

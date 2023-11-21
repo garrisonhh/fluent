@@ -63,11 +63,6 @@ fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!void {
     }
 }
 
-// TODO `expectPeer` (peer resolution) instead of matching:
-// 1. analyze all elements with an expectation
-// 2. find the widest type (use std.sort.max with typer.isSubclass as `<`)
-// 3. ensure all types are compatible with the widest type
-
 /// check node and expects it to match the provided node
 fn expectMatching(
     ast: *Ast,
@@ -252,18 +247,14 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node, expects: Type.Id) SemaError!Type.Id {
 
         .@"if" => |@"if"| @"if": {
             _ = try analyzeExpr(ast, @"if".cond, typer.pre(.bool));
-            _ = try analyzeExpr(ast, @"if".if_true, typer.pre(.any));
-            _ = try analyzeExpr(ast, @"if".if_false, typer.pre(.any));
+            const if_true_type = try analyzeExpr(ast, @"if".if_true, expects);
+            const if_false_type = try analyzeExpr(ast, @"if".if_false, expects);
+            const if_type = try typer.merge(&.{
+                if_true_type,
+                if_false_type,
+            });
 
-            // TODO peer expect
-            try expectMatching(
-                ast,
-                @"if".if_false,
-                @"if".if_true,
-            );
-            const t = ast.getType(@"if".if_true);
-
-            break :@"if" try ast.setType(node, t);
+            break :@"if" try ast.setType(node, if_type);
         },
 
         .program => |prog| prog: {
