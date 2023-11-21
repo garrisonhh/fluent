@@ -44,8 +44,7 @@ const HashMapUnmanaged = std.HashMapUnmanaged(
 var names = com.RefMap(Name, []const Ident){};
 var set = HashMapUnmanaged{};
 
-pub fn init() void {
-}
+pub fn init() void {}
 
 pub fn deinit(ally: Allocator) void {
     set.deinit(ally);

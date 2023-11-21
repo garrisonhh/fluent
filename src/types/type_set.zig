@@ -76,7 +76,6 @@ fn autoHashType(
 }
 
 /// recursively checks Type for equality with awareness of self referencing
-
 fn autoEqlType(
     comptime T: type,
     a: T,

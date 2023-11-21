@@ -7,7 +7,7 @@ pub const Number = struct {
 
     str: []const u8,
 
-    pub const ParseError = Allocator.Error || error {
+    pub const ParseError = Allocator.Error || error{
         InvalidRadix,
         InvalidDigit,
         InvalidNumeric,
@@ -21,7 +21,7 @@ pub const Number = struct {
             'A'...'Z' => 10 + ch - 'A',
             else => {
                 return ParseError.InvalidDigit;
-            }
+            },
         };
 
         const digit: T = switch (@typeInfo(T)) {
@@ -176,7 +176,7 @@ test "parse Number into f64" {
             const num = Number{ .str = str };
 
             const out = num.parseInto(Float) catch |e| {
-                std.debug.print("fail: {} \"{s}\"\n", .{n, str});
+                std.debug.print("fail: {} \"{s}\"\n", .{ n, str });
                 return e;
             };
             // NOTE this should be perfect, but it's good enough for now

@@ -9,8 +9,7 @@ pub const Ident = com.Ref(.identifier, 64);
 var idents = com.RefMap(Ident, []const u8){};
 var set = std.StringHashMapUnmanaged(Ident){};
 
-pub fn init() void {
-}
+pub fn init() void {}
 
 pub fn deinit(ally: Allocator) void {
     set.deinit(ally);

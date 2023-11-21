@@ -162,4 +162,3 @@ pub const renderIdent = rendering.renderIdent;
 pub const renderName = rendering.renderName;
 pub const renderValue = rendering.renderValueRef;
 pub const render = rendering.renderEnv;
-

@@ -196,7 +196,7 @@ fn renderFieldData(
             .{ .fg = theme.data },
         ),
         Ast.Expr.Number => try mason.newPre(value.str, .{ .fg = theme.data }),
-        fluent.Ident =>  fluent.env.renderIdent(mason, value),
+        fluent.Ident => fluent.env.renderIdent(mason, value),
 
         // enums
         Ast.UnaryOp,
