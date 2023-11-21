@@ -3,6 +3,7 @@ const blox = @import("blox");
 const fluent = @import("../mod.zig");
 const Type = fluent.Type;
 const typer = fluent.typer;
+const env = fluent.env;
 
 pub const RenderError = blox.Error || std.fmt.AllocPrintError;
 
@@ -63,7 +64,20 @@ pub fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.D
 
             break :f try mason.newBox(divs.items, span);
         },
-        .class => try mason.newPre("class", .{ .fg = theme.t }),
+        .class => |cls| cls: {
+            var divs = std.ArrayList(blox.Div).init(ally);
+            defer divs.deinit();
+
+            try divs.append(try mason.newPre("class", .{ .fg = theme.t }));
+            try divs.append(try mason.newPre("(", .{}));
+
+            // TODO render members with some kind of sorting
+            std.debug.assert(cls.members.len == 0);
+
+            try divs.append(try mason.newPre(")", .{}));
+
+            break :cls try mason.newBox(divs.items, span);
+        },
         .@"struct" => |st| st: {
             const comma = try mason.newPre(", ", .{});
 
@@ -93,6 +107,19 @@ pub fn renderType(mason: *blox.Mason, t: Type, this: Type.Id) RenderError!blox.D
     };
 }
 
-pub fn renderTypeId(mason: *blox.Mason, t: Type.Id) RenderError!blox.Div {
+/// render a type id without checking if it has a type id
+pub fn renderAnonymousTypeId(
+    mason: *blox.Mason,
+    t: Type.Id,
+) RenderError!blox.Div {
     return try renderType(mason, typer.get(t).*, t);
+}
+
+/// render a type id, attempting to find its typename first
+pub fn renderTypeId(mason: *blox.Mason, t: Type.Id) RenderError!blox.Div {
+    if (env.getTypeName(t)) |name| {
+        return try env.renderName(mason, name);
+    }
+
+    return try renderAnonymousTypeId(mason, t);
 }

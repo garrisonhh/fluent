@@ -15,7 +15,7 @@ const rendering = @import("rendering.zig");
 // TODO I'm using this pattern a lot, maybe I should impl a 2-way hashmap in
 // common
 const DefMap = std.AutoHashMapUnmanaged(Name, Value.Ref);
-const ReverseMap = std.AutoHashMapUnmanaged(Value.Ref, Name);
+const TypeNameMap = std.AutoHashMapUnmanaged(Type.Id, Name);
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const ally = gpa.allocator();
@@ -23,7 +23,7 @@ const ally = gpa.allocator();
 var values: Value.RefList = .{};
 /// pub for rendering only, don't touch this directly
 pub var defs: DefMap = .{};
-var reverse: ReverseMap = .{};
+var typenames: TypeNameMap = .{};
 
 pub fn init() void {
     idents.init();
@@ -36,7 +36,7 @@ pub fn deinit() void {
     values.deinit(ally);
 
     defs.deinit(ally);
-    reverse.deinit(ally);
+    typenames.deinit(ally);
     names.deinit(ally);
     idents.deinit(ally);
 
@@ -46,7 +46,7 @@ pub fn deinit() void {
         gpa = .{};
         values = .{};
         defs = .{};
-        reverse = .{};
+        typenames = .{};
     }
 }
 
@@ -64,7 +64,11 @@ pub fn add(n: Name, ref: Value.Ref) Allocator.Error!void {
     std.debug.assert(!defs.contains(n));
 
     try defs.put(ally, n, ref);
-    try reverse.put(ally, ref, n);
+
+    const v = get(ref);
+    if (v.* == .type) {
+        try typenames.put(ally, v.type, n);
+    }
 }
 
 /// create and add a value in one step
@@ -96,9 +100,8 @@ pub fn lookupType(n: Name) ?Type.Id {
     return null;
 }
 
-/// look up a value's name, if it has one
-pub fn reverseLookup(ref: Value.Ref) ?Name {
-    return reverse.get(ref);
+pub fn getTypeName(t: Type.Id) ?Name {
+    return typenames.get(t);
 }
 
 // ident/name behavior =========================================================

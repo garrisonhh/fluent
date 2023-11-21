@@ -236,8 +236,12 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node, expects: Type.Id) SemaError!Type.Id {
         .number => number: {
             // TODO error for incompatible number, ensure output is a number,
             // etc. this just bypasses analysis
+            // TODO I generate a typeclass based on the number's size, whether
+            // it is negative, whether it contains fractions. this would not be
+            // very hard and would lend to nice error output I think
             break :number try ast.setType(node, expects);
         },
+        // TODO need two-stage compiler
         .ident => @panic("TODO analyze ident"),
 
         .unary => |meta| try analyzeUnary(ast, node, meta),
@@ -284,7 +288,7 @@ pub const Result = enum { ok, fail };
 
 /// semantically analyze an expression
 pub fn analyze(ast: *Ast, node: Ast.Node) Error!Result {
-    if (analyzeExpr(ast, node, typer.pre(.unit))) |_| {
+    if (analyzeExpr(ast, node, typer.pre(.any))) |_| {
         return .ok;
     } else |e| switch (e) {
         InvalidTypeError.InvalidType => {

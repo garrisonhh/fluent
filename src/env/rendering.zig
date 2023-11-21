@@ -41,7 +41,7 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
     const ally = mason.ally;
     return switch (value) {
         .unit => try mason.newPre("()", .{ .fg = theme.data }),
-        .type => |t| try typer.render(mason, t),
+        .type => |t| try typer.renderAnonymous(mason, t),
         .name => |name| try renderName(mason, name),
         .bool => |b| bool: {
             const text = try std.fmt.allocPrint(ally, "{}", .{b});

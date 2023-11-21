@@ -36,6 +36,8 @@ pub const Value = union(enum) {
     pub const FnDef = struct {
         pub const ParamMap = std.AutoArrayHashMapUnmanaged(Ident, Type.Id);
 
+        // TODO this feels messy as hell. maybe just store a map of name to ssa
+        // function in parallel to the name to value map instead.
         pub const Ssa = union(enum) {
             uncompiled,
             compiled: fluent.ssa.Func.Ref,
@@ -68,7 +70,9 @@ pub const Value = union(enum) {
 
     /// determines the type based on the data format
     pub fn findType(self: Self) Type.Id {
-        // NOTE make sure this stays relatively trivial
+        // NOTE make sure this stays relatively trivial. for complex types,
+        // precomputing and storing the type information inside the value makes
+        // sense. or some other caching method.
         return switch (self) {
             inline .unit, .name, .type, .bool => |_, tag| predef: {
                 const pt = std.enums.nameCast(typer.PreludeType, tag);

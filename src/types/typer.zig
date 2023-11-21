@@ -54,6 +54,7 @@ pub fn deinit() void {
 
 pub const RenderError = rendering.RenderError;
 pub const render = rendering.renderTypeId;
+pub const renderAnonymous = rendering.renderAnonymousTypeId;
 
 /// retrieve a prelude type
 pub fn pre(pt: PreludeType) Type.Id {
