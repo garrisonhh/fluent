@@ -17,6 +17,15 @@ pub const Type = union(enum) {
             @"16",
             @"32",
             @"64",
+
+            pub fn count(bits: Bits) u8 {
+                return switch (bits) {
+                    .@"8" => 8,
+                    .@"16" => 16,
+                    .@"32" => 32,
+                    .@"64" => 64,
+                };
+            }
         };
 
         signedness: Signedness,
@@ -27,6 +36,13 @@ pub const Type = union(enum) {
         pub const Bits = enum {
             @"32",
             @"64",
+
+            pub fn count(bits: Bits) u8 {
+                return switch (bits) {
+                    .@"32" => 32,
+                    .@"64" => 64,
+                };
+            }
         };
 
         bits: Bits,

@@ -49,9 +49,9 @@ fn invalidType(ast: *Ast, meta: SemaErrorMeta) SemaError {
     return SemaError.InvalidType;
 }
 
-/// analyze a node and expect it to match or subclass the expected type
-fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!Type.Id {
-    const actual = try analyzeExpr(ast, node);
+/// check a node and expect it to match or subclass the expected type
+fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!void {
+    const actual = ast.getType(node);
     if (!typer.isCompatible(actual, expected)) {
         return invalidType(ast, .{
             .expected = .{
@@ -61,8 +61,6 @@ fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!Type.Id {
             },
         });
     }
-
-    return actual;
 }
 
 // TODO `expectPeer` (peer resolution) instead of matching:
@@ -70,14 +68,14 @@ fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!Type.Id {
 // 2. find the widest type (use std.sort.max with typer.isSubclass as `<`)
 // 3. ensure all types are compatible with the widest type
 
-/// analyzes node and expects it to match the provided node
+/// check node and expects it to match the provided node
 fn expectMatching(
     ast: *Ast,
     node: Ast.Node,
     to_match: Ast.Node,
-) SemaError!Type.Id {
-    const actual = try analyzeExpr(ast, node);
-    const expected = ast.getTypeOpt(to_match).?;
+) SemaError!void {
+    const actual = ast.getType(node);
+    const expected = ast.getType(to_match);
     if (!typer.isCompatible(actual, expected)) {
         return invalidType(ast, .{
             .expected_matching = .{
@@ -88,8 +86,6 @@ fn expectMatching(
             },
         });
     }
-
-    return actual;
 }
 
 fn analyzeUnary(
@@ -129,7 +125,7 @@ fn analyzeBinary(
         .divide,
         .modulus,
         => arith: {
-            const lhs_type = try expect(ast, meta.lhs, typer.pre(.number));
+            const lhs_type = try analyzeExpr(ast, meta.lhs, typer.pre(.number));
             _ = try expectMatching(ast, meta.rhs, meta.lhs);
 
             break :arith try ast.setType(node, lhs_type);
@@ -137,9 +133,8 @@ fn analyzeBinary(
 
         // conditions
         .eq => any: {
-            _ = try analyzeExpr(ast, meta.lhs);
-            _ = try expectMatching(ast, meta.rhs, meta.lhs);
-
+            _ = try analyzeExpr(ast, meta.lhs, typer.pre(.bool));
+            _ = try analyzeExpr(ast, meta.rhs, typer.pre(.bool));
             break :any try ast.setType(node, typer.pre(.bool));
         },
 
@@ -209,7 +204,7 @@ fn analyzeFn(
 
     // collect fn type
     const return_type = try dirtyEvilHackAnalyzePredefType(ast, meta.returns);
-    const body_type = try expect(ast, meta.body, return_type);
+    const body_type = try analyzeExpr(ast, meta.body, return_type);
     _ = body_type;
 
     const param_fields = typer.get(params_type).@"struct".fields;
@@ -234,11 +229,15 @@ fn analyzeFn(
 }
 
 /// dispatch for analysis
-fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
-    return switch (ast.get(node).*) {
+fn analyzeExpr(ast: *Ast, node: Ast.Node, expects: Type.Id) SemaError!Type.Id {
+    const actual: Type.Id = switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.pre(.unit)),
         .bool => try ast.setType(node, typer.pre(.bool)),
-        .number => @panic("TODO analyze number"),
+        .number => number: {
+            // TODO error for incompatible number, ensure output is a number,
+            // etc. this just bypasses analysis
+            break :number try ast.setType(node, expects);
+        },
         .ident => @panic("TODO analyze ident"),
 
         .unary => |meta| try analyzeUnary(ast, node, meta),
@@ -248,23 +247,26 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
         .@"fn" => |meta| try analyzeFn(ast, node, meta),
 
         .@"if" => |@"if"| @"if": {
-            _ = try expect(ast, @"if".cond, typer.pre(.bool));
-            _ = try analyzeExpr(ast, @"if".if_true);
+            _ = try analyzeExpr(ast, @"if".cond, typer.pre(.bool));
+            _ = try analyzeExpr(ast, @"if".if_true, typer.pre(.any));
+            _ = try analyzeExpr(ast, @"if".if_false, typer.pre(.any));
 
-            const branch_type = try expectMatching(
+            // TODO peer expect
+            try expectMatching(
                 ast,
                 @"if".if_false,
                 @"if".if_true,
             );
+            const t = ast.getType(@"if".if_true);
 
-            break :@"if" try ast.setType(node, branch_type);
+            break :@"if" try ast.setType(node, t);
         },
 
         .program => |prog| prog: {
             const prog_type = try ast.setType(node, typer.pre(.unit));
 
             for (prog) |child| {
-                _ = try expect(ast, child, typer.pre(.unit));
+                _ = try analyzeExpr(ast, child, typer.pre(.unit));
             }
 
             break :prog prog_type;
@@ -272,18 +274,24 @@ fn analyzeExpr(ast: *Ast, node: Ast.Node) SemaError!Type.Id {
 
         else => |expr| std.debug.panic("TODO analyze {s}", .{@tagName(expr)}),
     };
+
+    try expect(ast, node, expects);
+
+    return actual;
 }
 
 pub const Result = enum { ok, fail };
 
 /// semantically analyze an expression
 pub fn analyze(ast: *Ast, node: Ast.Node) Error!Result {
-    return if (analyzeExpr(ast, node)) |_| .ok else |e| switch (e) {
+    if (analyzeExpr(ast, node, typer.pre(.unit))) |_| {
+        return .ok;
+    } else |e| switch (e) {
         InvalidTypeError.InvalidType => {
             return .fail;
         },
         else => |filtered| {
             return @as(Error, @errSetCast(filtered));
         },
-    };
+    }
 }

@@ -4,47 +4,61 @@ const fluent = @import("../mod.zig");
 const Ast = fluent.Ast;
 const Name = fluent.Name;
 const Type = fluent.Type;
+const Value = fluent.Value;
 const env = fluent.env;
 const ssa = fluent.ssa;
 const typer = fluent.typer;
 
-pub const Error = Allocator.Error;
+pub const Error = Allocator.Error || Ast.Expr.Number.ParseError;
 
 /// sugar for creating a value ref and lowering it as a constant op
 fn lowerConstant(
     block: *ssa.BlockBuilder,
     t: Type.Id,
-    init_value: fluent.Value,
+    init_value: Value,
 ) Error!ssa.Local {
     return try block.op(t, .{
         .constant = try env.value(init_value),
     });
 }
 
-fn lowerTopLevelExpr(
-    ast: *const Ast,
-    prog: *ssa.Program,
-    node: Ast.Node,
-) Error!void {
-    switch (ast.get(node).*) {
-        .let => |let| {
-            // TODO execute the body as code?
+fn lowerNumber(
+    block: *ssa.BlockBuilder,
+    t: Type.Id,
+    num: Ast.Expr.Number,
+) Error!ssa.Local {
+    const init_value: Value = switch (typer.get(t).*) {
+        .int => |int| switch (int.signedness) {
+            inline else => |signedness| switch (int.bits) {
+                inline else => |bits| int: {
+                    const T = std.meta.Int(signedness, bits.count());
+                    const n = try num.parseInto(T);
 
-            // functions
-            const expr = ast.get(let.expr);
-            if (expr.* == .binary and expr.binary.op == .function) {
-                _ = try lowerFunction(
-                    ast,
-                    prog,
-                    expr.binary.lhs,
-                    expr.binary.rhs,
-                );
-            } else {
-                @panic("TODO execute let const");
-            }
+                    break :int switch (signedness) {
+                        .unsigned => .{
+                            .uint = @unionInit(Value.UInt, @typeName(T), n),
+                        },
+                        .signed => .{
+                            .int = @unionInit(Value.Int, @typeName(T), n),
+                        },
+                    };
+                },
+            },
         },
-        else => unreachable,
-    }
+        .float => |float| switch (float.bits) {
+            inline else => |bits| float: {
+                const F = std.meta.Float(bits.count());
+                const n = try num.parseInto(F);
+
+                break :float .{
+                    .float = @unionInit(Value.Float, @typeName(F), n),
+                };
+            },
+        },
+        else => @panic("unknown number type"),
+    };
+
+    return try lowerConstant(block, t, init_value);
 }
 
 /// lower an expr to its own block
@@ -103,7 +117,7 @@ fn lowerExpr(
     return switch (ast.get(node).*) {
         .unit => try lowerConstant(block, t, .unit),
         .bool => |b| try lowerConstant(block, t, .{ .bool = b }),
-        .number => @panic("TODO lower number"),
+        .number => |n| try lowerNumber(block, t, n),
         .ident => @panic("TODO lower ident"),
 
         .binary => |bin| bin: {

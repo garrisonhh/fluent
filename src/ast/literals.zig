@@ -17,8 +17,8 @@ pub const Number = struct {
     fn parseDigit(comptime T: type, ch: u8, radix: T) ParseError!T {
         const digit_byte: u8 = switch (ch) {
             '0'...'9' => ch - '0',
-            'a'...'z' => 10 + ch - 'a',
-            'A'...'Z' => 10 + ch - 'A',
+            'a'...'z' => 10 + (ch - 'a'),
+            'A'...'Z' => 10 + (ch - 'A'),
             else => {
                 return ParseError.InvalidDigit;
             },
@@ -26,7 +26,7 @@ pub const Number = struct {
 
         const digit: T = switch (@typeInfo(T)) {
             .Float => @floatFromInt(digit_byte),
-            .Int => digit_byte,
+            .Int => @intCast(digit_byte),
             else => unreachable,
         };
 
@@ -44,8 +44,8 @@ pub const Number = struct {
     /// - contain valid digits for their base (capitalization is ignored), and
     ///   underscores are ignored
     /// - may contain a dot '.' to separate fractal component
-    /// - may contain an exponent after 'e' or 'E'
-    fn parseInto(self: Self, comptime T: type) ParseError!T {
+    /// - TODO may contain an exponent after 'e' or 'E'
+    pub fn parseInto(self: Self, comptime T: type) ParseError!T {
         std.debug.assert(self.str.len > 0);
 
         const info = @typeInfo(T);
