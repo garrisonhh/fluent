@@ -7,6 +7,7 @@ const com = @import("common");
 const rendering = @import("rendering.zig");
 const Type = @import("type.zig").Type;
 const TypeSet = @import("type_set.zig").TypeSet;
+const TypeGraph = @import("TypeGraph.zig");
 const prelude = @import("prelude.zig");
 const fluent = @import("../mod.zig");
 
@@ -19,14 +20,11 @@ const ally = gpa.allocator();
 var map = com.RefMap(Type.Id, Type){};
 /// set of type/id pairs
 var types = TypeSet{};
-
-const SubclasserSet = std.ArrayListUnmanaged(Type.Id);
-/// maps type -> set of subclassers of the type
-/// TODO this will also need to map the other way. maybe I need a better way
-/// to represent this
-var graph = std.AutoHashMapUnmanaged(Type.Id, SubclasserSet){};
+/// maps types to their super and subtypes
+var graph: TypeGraph = undefined;
 
 pub fn init() Allocator.Error!void {
+    graph = try TypeGraph.init(ally);
     try prelude.init();
 }
 
@@ -37,11 +35,8 @@ pub fn deinit() void {
     while (iter.next()) |t| t.deinit(ally);
     map.deinit(ally);
 
-    var graph_sets = graph.valueIterator();
-    while (graph_sets.next()) |set| set.deinit(ally);
-    graph.deinit(ally);
-
     prelude.deinit(ally);
+    graph.deinit(ally);
 
     _ = gpa.deinit();
 
@@ -50,7 +45,6 @@ pub fn deinit() void {
         gpa = .{};
         map = .{};
         types = .{};
-        graph = .{};
     }
 }
 
@@ -65,42 +59,20 @@ pub fn pre(pt: PreludeType) Type.Id {
 
 /// mark a type as a subclass of another type
 pub fn addClass(t: Type.Id, super: Type.Id) Allocator.Error!void {
-    // don't create loops in the DAG
-    std.debug.assert(!isCompatible(t, super));
-
-    // get the type set for super, or create it if it doesn't exist
-    const res = try graph.getOrPut(ally, super);
-    if (!res.found_existing) {
-        res.value_ptr.* = .{};
-    }
-    const set = res.value_ptr;
-
-    try set.append(ally, t);
+    try graph.addClass(ally, t, super);
 }
 
-pub fn isSubclass(t: Type.Id, super: Type.Id) bool {
-    const set = graph.getPtr(super) orelse {
-        return false;
-    };
+pub fn isSubtype(t: Type.Id, super: Type.Id) bool {
+    return graph.isSubtype(t, super);
+}
 
-    // check direct containment
-    for (set.items) |elem| {
-        if (t.eql(elem)) return true;
-    }
-
-    // check recursive containment
-    for (set.items) |elem| {
-        if (isSubclass(t, elem)) return true;
-    }
-
-    // TODO check for compatible/equivalent classes
-
-    return false;
+pub fn isSupertype(t: Type.Id, sub: Type.Id) bool {
+    return graph.isSupertype(t, sub);
 }
 
 /// if inner is narrower or equal to outer
 pub fn isCompatible(inner: Type.Id, outer: Type.Id) bool {
-    return inner.eql(outer) or isSubclass(inner, outer);
+    return inner.eql(outer) or isSubtype(inner, outer);
 }
 
 /// create a typeclass which is the union of two types, either or both of which
@@ -109,7 +81,7 @@ pub fn mergePair(a: Type.Id, b: Type.Id) Allocator.Error!Type.Id {
     // directional compatibility
     if (isCompatible(a, b)) {
         return a;
-    } else if (isSubclass(b, a)) {
+    } else if (isSubtype(b, a)) {
         return b;
     }
 
@@ -218,29 +190,61 @@ pub fn get(id: Type.Id) *const Type {
 
 // debugging ===================================================================
 
-fn dumpTypeImpl(t: Type, this: Type.Id) !void {
+const blox = @import("blox");
+const stderr = std.io.getStdErr().writer();
+const span = blox.BoxOptions{ .direction = .right };
+
+fn dumpImpl() !void {
     if (builtin.mode != .Debug) {
         @compileError("don't leave this in release code");
     }
 
-    const blox = @import("blox");
-    const stderr = std.io.getStdErr().writer();
-
     var mason = blox.Mason.init(ally);
     defer mason.deinit();
 
-    const div = try mason.newBox(&.{
-        try mason.newPre("[dump]", .{}),
-        try rendering.renderType(&mason, t, this),
-        try mason.newSpacer(0, 1, .{}),
-    }, .{});
+    var rows = std.ArrayList(blox.Div).init(ally);
+    defer rows.deinit();
+
+    try rows.append(try mason.newPre("[type dump]", .{}));
+
+    var iter = map.iterator();
+    while (iter.nextEntry()) |entry| {
+        const t = entry.ref;
+        var row = std.ArrayList(blox.Div).init(ally);
+        defer row.deinit();
+
+        try row.append(try mason.newBox(&.{
+            try mason.newPre("[", .{}),
+            try render(&mason, t),
+            try mason.newPre("]", .{}),
+        }, span));
+
+        var other_iter = map.iterator();
+        while (other_iter.nextEntry()) |other_entry| {
+            const other = other_entry.ref;
+            if (isSupertype(t, other)) {
+                try row.append(try mason.newBox(&.{
+                    try mason.newPre("  :> ", .{}),
+                    try render(&mason, other),
+                }, span));
+            }
+            if (isSubtype(t, other)) {
+                try row.append(try mason.newBox(&.{
+                    try mason.newPre("  <: ", .{}),
+                    try render(&mason, other),
+                }, span));
+            }
+        }
+
+        try rows.append(try mason.newBox(row.items, .{}));
+    }
+
+    const div = try mason.newBox(rows.items, .{});
 
     try mason.write(div, stderr, .{});
 }
 
-/// dump a type to stderr in debug mode
-pub fn dumpType(t: Type, this: Type.Id) void {
-    dumpTypeImpl(t, this) catch |e| {
-        std.debug.panic("error in dumpType: {s}", .{@errorName(e)});
-    };
+/// dump typer
+pub fn dump() void {
+    dumpImpl() catch {};
 }

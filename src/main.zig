@@ -77,6 +77,8 @@ pub fn main() !void {
     try fluent.init(ally);
     defer fluent.deinit(ally);
 
+    fluent.typer.dump();
+
     // test source
     const text =
         \\fn useless {} i32 -> if true then 42 else 0
