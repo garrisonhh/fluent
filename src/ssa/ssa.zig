@@ -62,8 +62,6 @@ pub const Block = struct {
     pub const Ref = com.Ref(.ssa_block, 32);
     pub const RefList = com.RefList(Ref, Self);
 
-    /// the local this block receives branch values into (null for entry blocks)
-    phi: ?Local,
     /// instructions for block
     ops: []const Op,
     /// what this block returns
@@ -143,13 +141,11 @@ pub const BlockBuilder = struct {
     ally: Allocator,
     func: *FuncBuilder,
     ref: Block.Ref,
-    phi: ?Local,
     ops: std.ArrayListUnmanaged(Op) = .{},
 
     /// finalize this block
     pub fn build(self: *Self, ret: Local) Allocator.Error!void {
         self.func.blocks.set(self.ref, Block{
-            .phi = self.phi,
             .ops = try self.ops.toOwnedSlice(self.ally),
             .ret = ret,
         });
@@ -224,12 +220,11 @@ pub const FuncBuilder = struct {
     }
 
     /// add a new block to the function
-    pub fn block(self: *Self, phi: ?Local) Allocator.Error!BlockBuilder {
+    pub fn block(self: *Self) Allocator.Error!BlockBuilder {
         return BlockBuilder{
             .ally = self.ally,
             .func = self,
             .ref = try self.blocks.new(self.ally),
-            .phi = phi,
         };
     }
 };

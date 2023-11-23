@@ -67,9 +67,8 @@ fn lowerBlockExpr(
     prog: *ssa.Program,
     func: *ssa.FuncBuilder,
     node: Ast.Node,
-    phi: ?ssa.Local,
 ) Error!ssa.Block.Ref {
-    var block = try func.block(phi);
+    var block = try func.block();
     const ret = try lowerExpr(ast, prog, &block, node);
     try block.build(ret);
 
@@ -92,7 +91,7 @@ fn lowerFunction(
         _ = try func.param(param_type);
     }
 
-    const entry = try lowerBlockExpr(ast, prog, &func, body, null);
+    const entry = try lowerBlockExpr(ast, prog, &func, body);
 
     // build + update env entry
     try func.build(entry);
@@ -141,10 +140,9 @@ fn lowerExpr(
 
         .@"if" => |@"if"| @"if": {
             const cond = try lowerExpr(ast, prog, block, @"if".cond);
-            const if_true =
-                try lowerBlockExpr(ast, prog, func, @"if".if_true, cond);
+            const if_true = try lowerBlockExpr(ast, prog, func, @"if".if_true);
             const if_false =
-                try lowerBlockExpr(ast, prog, func, @"if".if_false, cond);
+                try lowerBlockExpr(ast, prog, func, @"if".if_false);
 
             break :@"if" try block.op(t, .{
                 .branch = .{

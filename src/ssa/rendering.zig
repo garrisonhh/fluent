@@ -119,14 +119,6 @@ fn renderBlock(
     var divs = std.ArrayList(blox.Div).init(mason.ally);
     defer divs.deinit();
 
-    if (block.phi) |phi| {
-        try divs.append(try mason.newBox(&.{
-            try mason.newPre("phi", .{ .fg = theme.meta }),
-            try mason.newSpacer(1, 1, .{}),
-            try renderLocal(mason, func, phi),
-        }, span));
-    }
-
     for (block.ops) |op| {
         const div = try renderOp(mason, prog, func, op);
         try divs.append(div);
