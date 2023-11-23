@@ -1,3 +1,5 @@
+//! a data structure representing a DAG for types and supertypes
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Type = @import("type.zig").Type;
@@ -84,7 +86,7 @@ fn setBit(self: Self, t: Type.Id, super: Type.Id, value: u1) void {
 }
 
 /// mark t as a subclass of super
-pub fn addClass(
+pub fn addSupertype(
     self: *Self,
     ally: Allocator,
     t: Type.Id,
@@ -92,19 +94,54 @@ pub fn addClass(
 ) Allocator.Error!void {
     try self.ensureStride(ally, @max(t.index, super.index) + 1);
 
-    // TODO guarantee no DAG loops?
-
+    std.debug.assert(!self.isSubtype(t, super));
     self.setBit(t, super, 1);
 
-    // TODO copy over super's supers
+    var super_supers = self.supertypes(super);
+    while (super_supers.next()) |super_super| {
+        self.setBit(t, super_super, 1);
+    }
 }
 
-/// t <: super
+/// does `t <: super`
 pub fn isSubtype(self: Self, t: Type.Id, super: Type.Id) bool {
     return self.getBit(t, super) != 0;
 }
 
-/// t :> sub
+/// does `t :> sub`
 pub fn isSupertype(self: Self, t: Type.Id, sub: Type.Id) bool {
     return self.getBit(sub, t) != 0;
+}
+
+pub fn subtypes(self: *const Self, t: Type.Id) Iterator(.sub) {
+    return .{ .graph = self, .t = t };
+}
+
+pub fn supertypes(self: *const Self, t: Type.Id) Iterator(.super) {
+    return .{ .graph = self, .t = t };
+}
+
+pub const IteratorKind = enum { sub, super };
+pub fn Iterator(comptime kind: IteratorKind) type {
+    return struct {
+        graph: *const Self,
+        t: Type.Id,
+        other: Type.Id = .{ .index = 0 },
+
+        pub fn next(iter: *@This()) ?Type.Id {
+            while (true) {
+                if (iter.other.index >= iter.graph.stride * 8) {
+                    return null;
+                }
+
+                const should_yield = switch (kind) {
+                    .sub => iter.graph.isSupertype(iter.t, iter.other),
+                    .super => iter.graph.isSubtype(iter.t, iter.other),
+                };
+
+                defer iter.other.index += 1;
+                if (should_yield) return iter.other;
+            }
+        }
+    };
 }

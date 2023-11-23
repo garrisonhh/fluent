@@ -59,7 +59,7 @@ pub fn pre(pt: PreludeType) Type.Id {
 
 /// mark a type as a subclass of another type
 pub fn addClass(t: Type.Id, super: Type.Id) Allocator.Error!void {
-    try graph.addClass(ally, t, super);
+    try graph.addSupertype(ally, t, super);
 }
 
 pub fn isSubtype(t: Type.Id, super: Type.Id) bool {
@@ -210,33 +210,41 @@ fn dumpImpl() !void {
     var iter = map.iterator();
     while (iter.nextEntry()) |entry| {
         const t = entry.ref;
-        var row = std.ArrayList(blox.Div).init(ally);
-        defer row.deinit();
+        var subtypes = std.ArrayList(blox.Div).init(mason.ally);
+        defer subtypes.deinit();
+        var supertypes = std.ArrayList(blox.Div).init(mason.ally);
+        defer supertypes.deinit();
 
-        try row.append(try mason.newBox(&.{
-            try mason.newPre("[", .{}),
-            try render(&mason, t),
-            try mason.newPre("]", .{}),
-        }, span));
+        try subtypes.append(try mason.newPre("  :>", .{}));
+        try supertypes.append(try mason.newPre("  <:", .{}));
 
-        var other_iter = map.iterator();
-        while (other_iter.nextEntry()) |other_entry| {
-            const other = other_entry.ref;
-            if (isSupertype(t, other)) {
-                try row.append(try mason.newBox(&.{
-                    try mason.newPre("  :> ", .{}),
-                    try render(&mason, other),
-                }, span));
-            }
-            if (isSubtype(t, other)) {
-                try row.append(try mason.newBox(&.{
-                    try mason.newPre("  <: ", .{}),
-                    try render(&mason, other),
-                }, span));
-            }
+        var sub_iter = graph.subtypes(t);
+        while (sub_iter.next()) |sub| {
+            try subtypes.appendSlice(&.{
+                try mason.newSpacer(1, 1, .{}),
+                try render(&mason, sub),
+            });
         }
 
-        try rows.append(try mason.newBox(row.items, .{}));
+        var super_iter = graph.supertypes(t);
+        while (super_iter.next()) |super| {
+            try supertypes.appendSlice(&.{
+                try mason.newSpacer(1, 1, .{}),
+                try render(&mason, super),
+            });
+        }
+
+        const label = try mason.newBox(&.{
+            try render(&mason, t),
+            try mason.newPre(" = ", .{}),
+            try renderAnonymous(&mason, t),
+        }, span);
+
+        try rows.append(try mason.newBox(&.{
+            label,
+            try mason.newBox(subtypes.items, span),
+            try mason.newBox(supertypes.items, span),
+        }, .{}));
     }
 
     const div = try mason.newBox(rows.items, .{});
