@@ -216,7 +216,6 @@ fn analyzeFn(
         .fn_def = .{
             .type = func_type,
             .params = param_map,
-            .ssa = .uncompiled,
         },
     });
 

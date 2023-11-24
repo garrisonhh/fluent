@@ -36,16 +36,8 @@ pub const Value = union(enum) {
     pub const FnDef = struct {
         pub const ParamMap = std.AutoArrayHashMapUnmanaged(Ident, Type.Id);
 
-        // TODO this feels messy as hell. maybe just store a map of name to ssa
-        // function in parallel to the name to value map instead.
-        pub const Ssa = union(enum) {
-            uncompiled,
-            compiled: fluent.ssa.Func.Ref,
-        };
-
         type: Type.Id,
         params: ParamMap,
-        ssa: Ssa,
     };
 
     unit,

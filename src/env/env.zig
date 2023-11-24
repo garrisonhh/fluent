@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const com = @import("common");
 const blox = @import("blox");
+const Jit = @import("x86-jit").Jit;
 const fluent = @import("../mod.zig");
 const Type = fluent.Type;
 const idents = @import("idents.zig");
@@ -12,8 +13,6 @@ const Name = names.Name;
 const Value = @import("value.zig").Value;
 const rendering = @import("rendering.zig");
 
-// TODO I'm using this pattern a lot, maybe I should impl a 2-way hashmap in
-// common
 const DefMap = std.AutoHashMapUnmanaged(Name, Value.Ref);
 const TypeNameMap = std.AutoHashMapUnmanaged(Type.Id, Name);
 
@@ -24,13 +23,18 @@ var values: Value.RefList = .{};
 /// pub for rendering only, don't touch this directly
 pub var defs: DefMap = .{};
 var typenames: TypeNameMap = .{};
+/// contains fully compiled functions
+pub var jit: Jit = undefined;
 
 pub fn init() void {
     idents.init();
     names.init();
+    jit = Jit.init(ally);
 }
 
 pub fn deinit() void {
+    jit.deinit();
+
     var val_iter = values.iterator();
     while (val_iter.next()) |v| v.deinit(ally);
     values.deinit(ally);

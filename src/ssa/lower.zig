@@ -64,54 +64,40 @@ fn lowerNumber(
 /// lower an expr to its own block
 fn lowerBlockExpr(
     ast: *const Ast,
-    prog: *ssa.Program,
     func: *ssa.FuncBuilder,
     node: Ast.Node,
 ) Error!ssa.Block.Ref {
     var block = try func.block();
-    const ret = try lowerExpr(ast, prog, &block, node);
-    try block.build(ret);
+    _ = try lowerExpr(ast, block, node);
 
     return block.ref;
 }
 
 fn lowerFunction(
     ast: *const Ast,
-    prog: *ssa.Program,
-    name: Name,
+    builder: *ssa.Builder,
     params: Ast.Node,
     body: Ast.Node,
 ) Error!ssa.Func.Ref {
-    var func = try prog.func(name);
+    var func = try builder.func();
 
     // compile entry block
-    const params_type = ast.getTypeOpt(params).?;
+    const params_type = ast.getType(params);
     const param_types = typer.get(params_type).@"struct".fields;
     for (param_types) |param_type| {
         _ = try func.param(param_type);
     }
 
-    const entry = try lowerBlockExpr(ast, prog, &func, body);
-
-    // build + update env entry
-    try func.build(entry);
-
-    const func_value_ref = env.lookup(name).?;
-    const func_value = env.getMut(func_value_ref);
-    std.debug.assert(func_value.fn_def.ssa == .uncompiled);
-    func_value.fn_def.ssa = .{ .compiled = func.ref };
+    _ = try lowerBlockExpr(ast, func, body);
 
     return func.ref;
 }
 
 fn lowerExpr(
     ast: *const Ast,
-    prog: *ssa.Program,
     block: *ssa.BlockBuilder,
     node: Ast.Node,
 ) Error!ssa.Local {
-    const func = block.func;
-
     const t = ast.getType(node);
     return switch (ast.get(node).*) {
         .unit => try lowerConstant(block, t, .unit),
@@ -121,8 +107,8 @@ fn lowerExpr(
 
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
-                try lowerExpr(ast, prog, block, bin.lhs),
-                try lowerExpr(ast, prog, block, bin.rhs),
+                try lowerExpr(ast, block, bin.lhs),
+                try lowerExpr(ast, block, bin.rhs),
             };
 
             const data: ssa.Opcode = switch (bin.op) {
@@ -139,10 +125,9 @@ fn lowerExpr(
         },
 
         .@"if" => |@"if"| @"if": {
-            const cond = try lowerExpr(ast, prog, block, @"if".cond);
-            const if_true = try lowerBlockExpr(ast, prog, func, @"if".if_true);
-            const if_false =
-                try lowerBlockExpr(ast, prog, func, @"if".if_false);
+            const cond = try lowerExpr(ast, block, @"if".cond);
+            const if_true = try lowerBlockExpr(ast, block.func, @"if".if_true);
+            const if_false = try lowerBlockExpr(ast, block.func, @"if".if_false);
 
             break :@"if" try block.op(t, .{
                 .branch = .{
@@ -161,28 +146,17 @@ fn lowerExpr(
 
 /// lower an analyzed ast onto the ssa program context, and returns a func ref
 /// to the entry point of the program or expression you are lowering.
-pub fn lower(
-    ast: *const Ast,
-    program: *ssa.Program,
-    prog_node: Ast.Node,
-) Error!void {
+pub fn lower(ally: Allocator, ast: *const Ast, prog_node: Ast.Node,) Error!ssa.Object {
     const prog_expr = ast.get(prog_node);
     std.debug.assert(prog_expr.* == .program);
+
+    var builder = ssa.Builder.init(ally);
+    errdefer builder.errdeinit();
 
     for (prog_expr.program) |decl| {
         switch (ast.get(decl).*) {
             .@"fn" => |@"fn"| {
-                // TODO eval this; this is a dirty evil hack
-                const fn_name_ident = ast.get(@"fn".name).ident;
-                const fn_name = try env.name(&.{fn_name_ident});
-
-                _ = try lowerFunction(
-                    ast,
-                    program,
-                    fn_name,
-                    @"fn".params,
-                    @"fn".body,
-                );
+                _ = try lowerFunction(ast, &builder, @"fn".params, @"fn".body);
             },
 
             else => |tag| {
@@ -190,4 +164,6 @@ pub fn lower(
             },
         }
     }
+
+    return try builder.build();
 }

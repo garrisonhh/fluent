@@ -47,18 +47,8 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     try writer.print("\n", .{});
 
     // lower to ssa
-    var ssa_prog = fluent.ssa.Program.init(ally);
-    defer ssa_prog.deinit();
-
-    const ssa_entry = try fluent.lower(&ast, &ssa_prog, root);
-    _ = ssa_entry;
-
-    // render ssa
-    const ssa_div = try ssa_prog.render(&mason);
-
-    try writer.print("[ssa]\n", .{});
-    try mason.write(ssa_div, writer, .{});
-    try writer.print("\n", .{});
+    var ssa_object = try fluent.lower(ally, &ast, root);
+    defer ssa_object.deinit(ally);
 
     // render env
     const env_div = try fluent.env.render(&mason);
@@ -66,11 +56,20 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     try writer.print("[env]\n", .{});
     try mason.write(env_div, writer, .{});
     try writer.print("\n", .{});
+
+    // render ssa
+    const ssa_div = try ssa_object.render(&mason);
+
+    try writer.print("[ssa]\n", .{});
+    try mason.write(ssa_div, writer, .{});
+    try writer.print("\n", .{});
 }
 
 pub fn main() !void {
     // init
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .stack_trace_frames = 20,
+    }){};
     defer _ = gpa.deinit();
     const ally = gpa.allocator();
 

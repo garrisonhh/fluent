@@ -27,6 +27,10 @@ pub const analyze = sema.analyze;
 
 pub const ssa = @import("ssa/ssa.zig");
 
+const assembler = @import("jit/assemble.zig");
+pub const AssembleError = assembler.Error;
+pub const assemble = assembler.assemble;
+
 const lowering = @import("ssa/lower.zig");
 pub const LowerError = lowering.Error;
 pub const LowerInto = lowering.LowerInto;

@@ -37,18 +37,14 @@ fn renderBlockRef(mason: *blox.Mason, ref: ssa.Block.Ref) RenderError!blox.Div {
     return try mason.newPre(text, .{ .fg = theme.meta });
 }
 
-fn renderFuncName(
-    mason: *blox.Mason,
-    prog: *const ssa.Program,
-    ref: ssa.Func.Ref,
-) RenderError!blox.Div {
-    const name = prog.funcs.get(ref).name;
-    return try fluent.env.renderName(mason, name);
+fn renderFuncRef(mason: *blox.Mason, ref: ssa.Func.Ref) RenderError!blox.Div {
+    var buf: [64]u8 = undefined;
+    const text = try std.fmt.bufPrint(&buf, "{f}", .{ref});
+    return try mason.newPre(text, .{ .fg = theme.meta });
 }
 
 fn renderOp(
     mason: *blox.Mason,
-    prog: *const ssa.Program,
     func: *const ssa.Func,
     op: ssa.Op,
 ) RenderError!blox.Div {
@@ -76,7 +72,7 @@ fn renderOp(
 
             try divs.appendSlice(&.{
                 code_tag,
-                try renderFuncName(mason, prog, call.func),
+                try renderFuncRef(mason, call.func),
             });
 
             for (call.args, 0..) |arg, i| {
@@ -110,7 +106,6 @@ fn renderOp(
 
 fn renderBlock(
     mason: *blox.Mason,
-    prog: *const ssa.Program,
     func: *const ssa.Func,
     ref: ssa.Block.Ref,
 ) RenderError!blox.Div {
@@ -120,7 +115,7 @@ fn renderBlock(
     defer divs.deinit();
 
     for (block.ops) |op| {
-        const div = try renderOp(mason, prog, func, op);
+        const div = try renderOp(mason, func, op);
         try divs.append(div);
     }
 
@@ -128,7 +123,7 @@ fn renderBlock(
     try divs.append(try mason.newBox(&.{
         try mason.newPre("ret", .{ .fg = theme.meta }),
         try mason.newSpacer(1, 1, .{}),
-        try renderLocal(mason, func, block.ret),
+        try renderLocal(mason, func, block.ret()),
     }, span));
 
     // stack it
@@ -146,10 +141,10 @@ fn renderBlock(
 
 fn renderFunc(
     mason: *blox.Mason,
-    prog: *const ssa.Program,
+    object: *const ssa.Object,
     ref: ssa.Func.Ref,
 ) RenderError!blox.Div {
-    const func = prog.funcs.get(ref);
+    const func = object.funcs.get(ref);
 
     var block_divs = std.ArrayList(blox.Div).init(mason.ally);
     defer block_divs.deinit();
@@ -161,14 +156,12 @@ fn renderFunc(
 
     var blocks = func.blocks.iterator();
     while (blocks.nextEntry()) |entry| {
-        const div = try renderBlock(mason, prog, func, entry.ref);
+        const div = try renderBlock(mason, func, entry.ref);
         try block_divs.append(div);
     }
 
     const label = try mason.newBox(&.{
-        try mason.newPre("fn", .{ .fg = theme.meta }),
-        try mason.newSpacer(1, 1, .{}),
-        try renderFuncName(mason, prog, ref),
+        try renderFuncRef(mason, ref),
         try mason.newPre(" <", .{}),
         try fluent.typer.render(mason, func.type),
         try mason.newPre(">", .{}),
@@ -184,16 +177,16 @@ fn renderFunc(
     }, .{});
 }
 
-pub fn renderProgram(
-    prog: *const ssa.Program,
+pub fn renderObject(
+    object: *const ssa.Object,
     mason: *blox.Mason,
 ) RenderError!blox.Div {
     var func_divs = std.ArrayList(blox.Div).init(mason.ally);
     defer func_divs.deinit();
 
-    var funcs = prog.funcs.iterator();
+    var funcs = object.funcs.iterator();
     while (funcs.nextEntry()) |entry| {
-        const div = try renderFunc(mason, prog, entry.ref);
+        const div = try renderFunc(mason, object, entry.ref);
         try func_divs.append(div);
     }
 

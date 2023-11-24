@@ -57,26 +57,11 @@ pub fn renderValue(mason: *blox.Mason, value: Value) blox.Error!blox.Div {
             },
         },
 
-        .fn_def => |fd| fd: {
-            const status = try mason.newPre(
-                @tagName(fd.ssa),
-                .{
-                    .fg = blox.Color.init(
-                        .normal,
-                        if (fd.ssa == .compiled) .green else .red,
-                    ),
-                },
-            );
-
-            break :fd try mason.newBox(&.{
-                try mason.newPre("fn", .{ .fg = theme.syntax }),
-                try mason.newPre(" <", .{}),
-                try typer.render(mason, fd.type),
-                try mason.newPre("> (", .{}),
-                status,
-                try mason.newPre(")", .{}),
-            }, span);
-        },
+        .fn_def => |fd| try mason.newBox(&.{
+            try mason.newPre("fn", .{ .fg = theme.syntax }),
+            try mason.newPre(" <", .{}),
+            try typer.render(mason, fd.type),
+        }, span),
     };
 }
 
