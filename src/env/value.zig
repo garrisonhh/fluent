@@ -104,4 +104,22 @@ pub const Value = union(enum) {
             ),
         };
     }
+
+    pub fn asBytes(self: Self, ally: Allocator) Allocator.Error![]const u8 {
+        const t = self.findType();
+        const nbytes = typer.byteSizeOf(t);
+        const slice = try ally.alloc(u8, nbytes);
+
+        switch (self) {
+            .unit => {},
+            .bool => |b| @memcpy(slice, std.mem.asBytes(&b)),
+            inline .uint, .int, .float => |num| switch (num) {
+                inline else => |x| @memcpy(slice, std.mem.asBytes(&x)),
+            },
+
+            else => @panic("TODO"),
+        }
+
+        return slice;
+    }
 };

@@ -146,7 +146,11 @@ fn lowerExpr(
 
 /// lower an analyzed ast onto the ssa program context, and returns a func ref
 /// to the entry point of the program or expression you are lowering.
-pub fn lower(ally: Allocator, ast: *const Ast, prog_node: Ast.Node,) Error!ssa.Object {
+pub fn lower(
+    ally: Allocator,
+    ast: *const Ast,
+    prog_node: Ast.Node,
+) Error!ssa.Object {
     const prog_expr = ast.get(prog_node);
     std.debug.assert(prog_expr.* == .program);
 

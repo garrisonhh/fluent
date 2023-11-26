@@ -70,7 +70,7 @@ pub const Block = struct {
     }
 
     /// the local returned by this block
-    pub fn ret(self: Self) Local {
+    pub fn retLocal(self: Self) Local {
         return self.ops[self.ops.len - 1].dest;
     }
 };
@@ -177,7 +177,7 @@ pub const FuncBuilder = struct {
             slot.* = self.locals.get(param_local).*;
         }
 
-        const ret_local = self.blocks.get(self.entry.?).ret();
+        const ret_local = self.blocks.get(self.entry.?).retLocal();
         const returns = self.locals.get(ret_local).*;
 
         const func_type = try fluent.typer.put(.{

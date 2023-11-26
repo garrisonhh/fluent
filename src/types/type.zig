@@ -125,4 +125,21 @@ pub const Type = union(enum) {
 
         return owned;
     }
+
+    pub fn bitSize(self: Self) usize {
+        const ptr_size = 64;
+        return switch (self) {
+            .unit => 0,
+            .bool => 1,
+            .name, .type => ptr_size,
+            .int => |int| int.bits.count(),
+            .float => |float| float.bits.count(),
+
+            else => std.debug.panic("TODO size of {s} type", .{@tagName(self)}),
+        };
+    }
+
+    pub fn byteSize(self: Self) usize {
+        return std.mem.alignForward(usize, self.bitSize(), 8) / 8;
+    }
 };

@@ -188,6 +188,14 @@ pub fn get(id: Type.Id) *const Type {
     return map.get(id);
 }
 
+pub fn bitSizeOf(id: Type.Id) usize {
+    return get(id).bitSize();
+}
+
+pub fn byteSizeOf(id: Type.Id) usize {
+    return get(id).byteSize();
+}
+
 // debugging ===================================================================
 
 const blox = @import("blox");

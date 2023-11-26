@@ -123,7 +123,7 @@ fn renderBlock(
     try divs.append(try mason.newBox(&.{
         try mason.newPre("ret", .{ .fg = theme.meta }),
         try mason.newSpacer(1, 1, .{}),
-        try renderLocal(mason, func, block.ret()),
+        try renderLocal(mason, func, block.retLocal()),
     }, span));
 
     // stack it

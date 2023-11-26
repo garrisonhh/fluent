@@ -10,6 +10,9 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var mason = blox.Mason.init(ally);
     defer mason.deinit();
 
+    // print source
+    try writer.print("[src]\n{s}\n", .{fluent.sources.get(source).text});
+
     // parse
     var ast = fluent.Ast.init(ally);
     defer ast.deinit();
@@ -50,19 +53,18 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var ssa_object = try fluent.lower(ally, &ast, root);
     defer ssa_object.deinit(ally);
 
-    // render env
-    const env_div = try fluent.env.render(&mason);
-
-    try writer.print("[env]\n", .{});
-    try mason.write(env_div, writer, .{});
-    try writer.print("\n", .{});
-
     // render ssa
     const ssa_div = try ssa_object.render(&mason);
 
     try writer.print("[ssa]\n", .{});
     try mason.write(ssa_div, writer, .{});
     try writer.print("\n", .{});
+
+    // jit assemble ssa
+    try writer.context.flush();
+    try fluent.assemble(ally, ssa_object);
+
+    // call jit function
 }
 
 pub fn main() !void {
@@ -76,18 +78,16 @@ pub fn main() !void {
     try fluent.init(ally);
     defer fluent.deinit(ally);
 
-    fluent.typer.dump();
-
     // test source
     const text =
-        \\fn useless {} i32 -> if true then 42 else 0
+        \\fn useless {} i32 -> 42
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);
 
     // debug parse
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
+    const stdout_writer = std.io.getStdOut().writer();
+    var bw = std.io.bufferedWriter(stdout_writer);
     const stdout = bw.writer();
 
     try debugParse(ally, source, stdout);

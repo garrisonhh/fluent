@@ -6,6 +6,14 @@ in order to get the jit assembler running quickl;y
 
 ## codegen conventions
 
+### 'block call'
+
+since blocks represent expressions which return values, it makes sense to treat
+blocks as procedures. blocks use the same stack as their owning function, but
+use x86 `call` and `ret`, returning their value through `%rax`.
+
+### function call convention
+
 ALL ssa functions are expected to be callable using the System V ABI as its
 calling convention. this is because it is easy to implement and makes interop
 with zig incredibly simple.
@@ -13,7 +21,7 @@ with zig incredibly simple.
 inlined functions or functions created by the compiler can use whatever
 convention desired, as long as it doesn't break System V compatibility.
 
-### quick overview
+#### quick overview of System V
 
 - available registers
     - caller must preserve: rax, rdi, rsi, rdx, rcx, r8, r9, r10, r11
@@ -27,8 +35,7 @@ convention desired, as long as it doesn't break System V compatibility.
     - floats are placed in numbered xmm registers
     - values are returned in rax, and rdx can be used for up to 16 bytes
 
-
-### references
+#### references
 - [the osdev wiki](https://wiki.osdev.org/System_V_ABI) provides a succinct and
   useful high-level description of System V and a TON of helpful links.
     - [this pdf](https://www.uclibc.org/docs/psABI-x86_64.pdf) is linked from
