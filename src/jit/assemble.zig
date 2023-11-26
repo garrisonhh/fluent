@@ -54,7 +54,7 @@ fn mapLocals(
     }
 
     // must be 16-byte aligned by system v spec
-    locmap.frame_size = std.mem.alignBackward(u31, locmap.frame_size, 16);
+    locmap.frame_size = std.mem.alignForward(u31, locmap.frame_size, 16);
 
     return locmap;
 }
@@ -119,6 +119,61 @@ fn movLoc(
     }
 }
 
+// TODO this function signature is absurdly complicated
+fn assembleOp(
+    arena_ally: Allocator,
+    builder: *Jit.Builder,
+    bbs: BlockBuilderMap,
+    bb: *Jit.BlockBuilder,
+    locmap: LocMap,
+    func: *const Func,
+    op: ssa.Op,
+) Error!void {
+    const dst_loc = locmap.locs.get(op.dest).?;
+
+    switch (op.code) {
+        .constant => |val| {
+            const bytes = try fluent.env.get(val).asBytes(arena_ally);
+
+            // constant expects a little-endian u64
+            const const_bytes = try arena_ally.alloc(u8, 8);
+            @memset(const_bytes, 0);
+            @memcpy(const_bytes[0..bytes.len], bytes);
+            try bb.op(.{
+                .constant = .{ .bytes = const_bytes, .dst = .rax },
+            });
+
+            const size = Jit.Op.Size.from(bytes.len).?;
+            try movLoc(bb, size, .{ .reg = .rax }, dst_loc);
+        },
+        .branch => |branch| {
+            const cond_loc = locmap.locs.get(branch.cond).?;
+            const if_true = bbs.get(branch.if_true).?.label;
+            const if_false = bbs.get(branch.if_false).?.label;
+
+            // cmp cond
+            try movLoc(bb, .byte, cond_loc, .{ .reg = .rax });
+            try bb.op(.{ .cmp = .{ .lhs = .rax, .rhs = .rax } });
+
+            // branching calls
+            const call_false = try builder.block();
+            try bb.op(.{
+                .jump_if = .{ .cond = .z, .label = call_false.label },
+            });
+            try bb.op(.{ .call = if_true });
+            try call_false.op(.{ .call = if_false });
+
+            // accept return value
+            const ret_t = func.locals.get(op.dest).*;
+            const ret_size = Jit.Op.Size.from(typer.byteSizeOf(ret_t)).?;
+            try movLoc(bb, ret_size, dst_loc, .{ .reg = .rax });
+        },
+
+        else => std.debug.panic("TODO assemble ssa {s}", .{@tagName(op.code)}),
+    }
+}
+
+// TODO this function signature is absurdly complicated
 fn assembleBlock(
     arena_ally: Allocator,
     builder: *Jit.Builder,
@@ -132,48 +187,7 @@ fn assembleBlock(
     _ = fbs;
 
     for (block.ops) |op| {
-        const dst_loc = locmap.locs.get(op.dest).?;
-
-        switch (op.code) {
-            .constant => |val| {
-                const bytes = try fluent.env.get(val).asBytes(arena_ally);
-
-                // constant expects a little-endian u64
-                const const_bytes = try arena_ally.alloc(u8, 8);
-                @memset(const_bytes, 0);
-                @memcpy(const_bytes[0..bytes.len], bytes);
-                try bb.op(.{
-                    .constant = .{ .bytes = const_bytes, .dst = .rax },
-                });
-
-                const size = Jit.Op.Size.from(bytes.len).?;
-                try movLoc(bb, size, .{ .reg = .rax }, dst_loc);
-            },
-            .branch => |branch| {
-                const cond_loc = locmap.locs.get(branch.cond).?;
-                const if_true = bbs.get(branch.if_true).?.label;
-                const if_false = bbs.get(branch.if_false).?.label;
-
-                // cmp cond
-                try movLoc(bb, .byte, cond_loc, .{ .reg = .rax });
-                try bb.op(.{ .cmp = .{ .lhs = .rax, .rhs = .rax } });
-
-                // branching calls
-                const call_false = try builder.block();
-                try bb.op(.{
-                    .jump_if = .{ .cond = .z, .label = call_false.label },
-                });
-                try bb.op(.{ .call = if_true });
-                try call_false.op(.{ .call = if_false });
-
-                // accept return value
-                const ret_t = func.locals.get(op.dest).*;
-                const ret_size = Jit.Op.Size.from(typer.byteSizeOf(ret_t)).?;
-                try movLoc(bb, ret_size, dst_loc, .{ .reg = .rax });
-            },
-
-            else => std.debug.panic("TODO assemble ssa {s}", .{@tagName(op.code)}),
-        }
+        try assembleOp(arena_ally, builder, bbs, bb, locmap, func, op);
     }
 
     // return the block value through rax
@@ -194,20 +208,29 @@ fn assembleFunc(
 ) Error!void {
     const locmap = try mapLocals(arena_ally, func);
 
-    // map out blocks
+    // map out non-entry blocks
     var bbs = BlockBuilderMap{};
     var block_iter = func.blocks.iterator();
     while (block_iter.nextEntry()) |entry| {
-        const bb =
-            if (entry.ref.eql(func.entry)) entry_bb else try builder.block();
-
-        try bbs.put(arena_ally, entry.ref, bb);
+        if (entry.ref.eql(func.entry)) continue;
+        try bbs.put(arena_ally, entry.ref, try builder.block());
     }
 
-    // assemble all the blocks
+    // assemble entry block
+    try entry_bb.op(.{ .enter = locmap.frame_size });
+
+    const entry_block = func.blocks.get(func.entry);
+    for (entry_block.ops) |op| {
+        try assembleOp(arena_ally, builder, bbs, entry_bb, locmap, func, op);
+    }
+
+    try entry_bb.op(.leave);
+    try entry_bb.op(.ret);
+
+    // assemble non-entry blocks
     block_iter = func.blocks.iterator();
     while (block_iter.nextEntry()) |entry| {
-        var bb = bbs.get(entry.ref).?;
+        var bb = bbs.get(entry.ref) orelse continue;
         try assembleBlock(
             arena_ally,
             builder,
@@ -244,6 +267,19 @@ pub fn assemble(ally: Allocator, object: ssa.Object) Error!void {
         try assembleFunc(arena_ally, &builder, fbs, fb, entry.ptr);
     }
 
+    // build and add all the compiled functions
+    try builder.build();
+
+    func_iter = object.funcs.iterator();
+    while (func_iter.nextEntry()) |entry| {
+        const func_ref = entry.ref;
+        const func = entry.ptr.*;
+        if (func.name) |name| {
+            const label = fbs.get(func_ref).?.label;
+            try fluent.env.addCompiled(name, label);
+        }
+    }
+
     // TODO remove
     {
         const stderr = std.io.getStdErr().writer();
@@ -258,6 +294,4 @@ pub fn assemble(ally: Allocator, object: ssa.Object) Error!void {
         mason.write(rendered, stderr, .{}) catch {};
         stderr.print("\n", .{}) catch {};
     }
-
-    try builder.build();
 }

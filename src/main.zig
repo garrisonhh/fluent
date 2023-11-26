@@ -6,7 +6,7 @@ const fluent = @import("mod.zig");
 
 pub const std_options = fluent.std_options;
 
-fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
+fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var mason = blox.Mason.init(ally);
     defer mason.deinit();
 
@@ -63,8 +63,6 @@ fn debugParse(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     // jit assemble ssa
     try writer.context.flush();
     try fluent.assemble(ally, ssa_object);
-
-    // call jit function
 }
 
 pub fn main() !void {
@@ -80,17 +78,25 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\fn useless {} i32 -> 42
+        \\fn useless {} u64 -> 42
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);
 
-    // debug parse
+    // debug compile
     const stdout_writer = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_writer);
     const stdout = bw.writer();
 
-    try debugParse(ally, source, stdout);
+    try debugCompile(ally, source, stdout);
+
+    // attempt to run the function
+    const func_name = try fluent.env.nameFromStr("useless");
+    const F = fn() callconv(.SysV) i32;
+    const func = fluent.env.getCompiled(func_name, F).?;
+    const res = func();
+
+    try stdout.print("function returned {}\n", .{res});
 
     try bw.flush();
 }

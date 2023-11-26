@@ -76,10 +76,17 @@ fn lowerBlockExpr(
 fn lowerFunction(
     ast: *const Ast,
     builder: *ssa.Builder,
+    name_node: ?Ast.Node,
     params: Ast.Node,
     body: Ast.Node,
 ) Error!ssa.Func.Ref {
-    var func = try builder.func();
+    // TODO this is a dirty hack
+    const name: ?Name = if (name_node) |nnode| name: {
+        const name_ident = ast.get(nnode).ident;
+        break :name try env.name(&.{name_ident});
+    } else null;
+
+    var func = try builder.func(name);
 
     // compile entry block
     const params_type = ast.getType(params);
@@ -160,7 +167,13 @@ pub fn lower(
     for (prog_expr.program) |decl| {
         switch (ast.get(decl).*) {
             .@"fn" => |@"fn"| {
-                _ = try lowerFunction(ast, &builder, @"fn".params, @"fn".body);
+                _ = try lowerFunction(
+                    ast,
+                    &builder,
+                    @"fn".name,
+                    @"fn".params,
+                    @"fn".body,
+                );
             },
 
             else => |tag| {

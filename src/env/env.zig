@@ -15,6 +15,7 @@ const rendering = @import("rendering.zig");
 
 const DefMap = std.AutoHashMapUnmanaged(Name, Value.Ref);
 const TypeNameMap = std.AutoHashMapUnmanaged(Type.Id, Name);
+const CompiledMap = std.AutoHashMapUnmanaged(Name, Jit.Label);
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const ally = gpa.allocator();
@@ -25,6 +26,7 @@ pub var defs: DefMap = .{};
 var typenames: TypeNameMap = .{};
 /// contains fully compiled functions
 pub var jit: Jit = undefined;
+var compiled: CompiledMap = .{};
 
 pub fn init() void {
     idents.init();
@@ -39,6 +41,7 @@ pub fn deinit() void {
     while (val_iter.next()) |v| v.deinit(ally);
     values.deinit(ally);
 
+    compiled.deinit(ally);
     defs.deinit(ally);
     typenames.deinit(ally);
     names.deinit(ally);
@@ -49,6 +52,7 @@ pub fn deinit() void {
     if (builtin.is_test) {
         gpa = .{};
         values = .{};
+        compiled = .{};
         defs = .{};
         typenames = .{};
     }
@@ -106,6 +110,17 @@ pub fn lookupType(n: Name) ?Type.Id {
 
 pub fn getTypeName(t: Type.Id) ?Name {
     return typenames.get(t);
+}
+
+// compiled functions ==========================================================
+
+pub fn addCompiled(n: Name, label: Jit.Label) Allocator.Error!void {
+    try compiled.put(ally, n, label);
+}
+
+pub fn getCompiled(n: Name, comptime T: type) ?*const T {
+    const label = compiled.get(n) orelse return null;
+    return jit.get(label, T);
 }
 
 // ident/name behavior =========================================================

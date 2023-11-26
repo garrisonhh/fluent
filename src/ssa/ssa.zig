@@ -80,6 +80,7 @@ pub const Func = struct {
     pub const Ref = com.Ref(.ssa_func, 32);
     pub const RefList = com.RefList(Ref, Self);
 
+    name: ?Name,
     type: Type.Id,
     entry: Block.Ref,
     locals: LocalList,
@@ -146,6 +147,7 @@ pub const FuncBuilder = struct {
     const Self = @This();
 
     builder: *Builder,
+    name: ?Name,
     ref: Func.Ref,
     entry: ?Block.Ref = null,
     params: std.ArrayListUnmanaged(Local) = .{},
@@ -188,6 +190,7 @@ pub const FuncBuilder = struct {
         });
 
         return Func{
+            .name = self.name,
             .type = func_type,
             .entry = self.entry.?,
             .locals = self.locals,
@@ -270,13 +273,14 @@ pub const Builder = struct {
         return Object{ .funcs = self.funcs };
     }
 
-    pub fn func(self: *Self) Allocator.Error!*FuncBuilder {
+    pub fn func(self: *Self, name: ?Name) Allocator.Error!*FuncBuilder {
         const arena_ally = self.arena.allocator();
 
         const ref = try self.funcs.new(self.ally);
         const fb = try arena_ally.create(FuncBuilder);
         fb.* = FuncBuilder{
             .builder = self,
+            .name = name,
             .ref = ref,
         };
 
