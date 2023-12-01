@@ -263,11 +263,8 @@ fn assembleBranch(
             const if_true = ctx.get(func, br.if_true).label;
             const if_false = ctx.get(func, br.if_false).label;
 
-            // cmp cond
             try movLocalTo(locmap, bb, br.cond, .{ .reg = .rax });
-            try bb.op(.{ .cmp = .{ .lhs = .rax, .rhs = .rax } });
-
-            // branch
+            try bb.op(.{ .@"test" = .{ .lhs = .rax, .rhs = .rax } });
             try bb.op(.{ .jump_if = .{ .cond = .z, .label = if_false } });
             try bb.op(.{ .jump = if_true });
         },
@@ -295,6 +292,24 @@ fn assembleBlock(
     try assembleBranch(ctx, locmap, func_ref, bb, block.branch);
 }
 
+fn assembleFunc(
+    ctx: Context,
+    locmap: LocMap,
+    func_ref: Func.Ref,
+    func: *const Func,
+) Error!void {
+    // add SysV setup to entry block
+    const entry = ctx.get(func_ref, func.entry);
+    try entry.op(.{ .enter = locmap.frame_size });
+
+    // assemble behavior for all blocks
+    var block_iter = func.blocks.iterator();
+    while (block_iter.nextEntry()) |block_entry| {
+        const block_ref = block_entry.ref;
+        try assembleBlock(ctx, locmap, func_ref, block_ref);
+    }
+}
+
 /// assembles ssa into the environment's jit
 pub fn assemble(ally: Allocator, object: ssa.Object) Error!void {
     var arena = std.heap.ArenaAllocator.init(ally);
@@ -313,12 +328,7 @@ pub fn assemble(ally: Allocator, object: ssa.Object) Error!void {
         const func = func_entry.ptr;
 
         const locmap = try mapLocals(arena_ally, func);
-
-        var block_iter = func.blocks.iterator();
-        while (block_iter.nextEntry()) |block_entry| {
-            const block_ref = block_entry.ref;
-            try assembleBlock(ctx, locmap, func_ref, block_ref);
-        }
+        try assembleFunc(ctx, locmap, func_ref, func);
     }
 
     try builder.build();
