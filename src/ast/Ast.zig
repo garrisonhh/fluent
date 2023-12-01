@@ -52,14 +52,14 @@ pub const Expr = union(enum) {
         rhs: Node,
     };
 
-    pub const RecordEntry = struct {
+    pub const KV = struct {
         key: Node,
         value: Node,
     };
 
     pub const Fn = struct {
         name: Node,
-        params: Node,
+        params: []const KV,
         returns: Node,
         body: Node,
     };
@@ -75,7 +75,7 @@ pub const Expr = union(enum) {
     number: Number,
     ident: Ident,
     parens: Node,
-    record: []const RecordEntry,
+    record: []const KV,
     call: []const Node,
     program: []const Node,
     unary: Unary,
@@ -92,7 +92,6 @@ pub const Expr = union(enum) {
             .parens,
             .unary,
             .binary,
-            .@"fn",
             .@"if",
             => {},
 
@@ -100,6 +99,8 @@ pub const Expr = union(enum) {
             .call,
             .program,
             => |slice| ally.free(slice),
+
+            .@"fn" => |@"fn"| ally.free(@"fn".params),
         }
     }
 };

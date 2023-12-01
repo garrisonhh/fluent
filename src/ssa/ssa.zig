@@ -95,10 +95,12 @@ pub const Func = struct {
     type: Type.Id,
     entry: Block.Ref,
     exit: Block.Ref,
+    params: []const Local,
     locals: LocalList,
     blocks: Block.RefList,
 
     fn deinit(self: *Self, ally: Allocator) void {
+        ally.free(self.params);
         self.locals.deinit(ally);
 
         var block_iter = self.blocks.iterator();
@@ -206,8 +208,8 @@ pub const FuncBuilder = struct {
         }
 
         // generate type
-        var params = try arena_ally.alloc(Type.Id, self.params.items.len);
-        for (params, self.params.items) |*slot, param_local| {
+        var param_types = try arena_ally.alloc(Type.Id, self.params.items.len);
+        for (param_types, self.params.items) |*slot, param_local| {
             slot.* = self.locals.get(param_local).*;
         }
 
@@ -217,16 +219,20 @@ pub const FuncBuilder = struct {
 
         const func_type = try fluent.typer.put(.{
             .@"fn" = .{
-                .params = params,
+                .params = param_types,
                 .returns = returns,
             },
         });
+
+        // move everything
+        const params = try self.builder.ally.dupe(Local, self.params.items);
 
         return Func{
             .name = self.name,
             .type = func_type,
             .entry = self.entry.?,
             .exit = self.exit.?,
+            .params = params,
             .locals = self.locals,
             .blocks = self.blocks,
         };

@@ -30,7 +30,10 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     };
 
     // analyze
-    switch (try fluent.analyze(&ast, root)) {
+    // TODO programmatically create name for source
+    const scope_name = try fluent.env.nameFromStr("main");
+
+    switch (try fluent.analyze(&ast, scope_name, root)) {
         .ok => {},
         .fail => {
             for (ast.getErrors()) |err| {
@@ -48,9 +51,10 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     try writer.print("[ast]\n", .{});
     try mason.write(ast_div, writer, .{});
     try writer.print("\n", .{});
+    try writer.context.flush();
 
     // lower to ssa
-    var ssa_object = try fluent.lower(ally, &ast, root);
+    var ssa_object = try fluent.lower(ally, &ast, scope_name, root);
     defer ssa_object.deinit(ally);
 
     // render ssa
@@ -59,9 +63,9 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     try writer.print("[ssa]\n", .{});
     try mason.write(ssa_div, writer, .{});
     try writer.print("\n", .{});
+    try writer.context.flush();
 
     // jit assemble ssa
-    try writer.context.flush();
     try fluent.assemble(ally, ssa_object);
 }
 
@@ -78,13 +82,8 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\fn useless {} i64 ->
-        \\  if false then
-        \\    42
-        \\  else if true then
-        \\    36
-        \\  else
-        \\    24
+        \\fn f(a: i64, b: i64) i64 ->
+        \\  a + b
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);
@@ -97,10 +96,10 @@ pub fn main() !void {
     try debugCompile(ally, source, stdout);
 
     // attempt to run the function
-    const func_name = try fluent.env.nameFromStr("useless");
-    const F = fn () callconv(.SysV) i64;
+    const func_name = try fluent.env.nameFromStr("f");
+    const F = fn (i64, i64) callconv(.SysV) i64;
     const func = fluent.env.getCompiled(func_name, F).?;
-    const res = func();
+    const res = func(32, 31);
 
     try stdout.print("function returned {}\n", .{res});
 

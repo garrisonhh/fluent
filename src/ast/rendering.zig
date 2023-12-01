@@ -17,7 +17,7 @@ const theme = struct {
     const tag = c(.bright, .cyan);
     const data = c(.bright, .magenta);
     const field = c(.normal, .yellow);
-    const err = c(.bright, .red);
+    const err = c(.bright, .black);
 };
 
 // errors ======================================================================
@@ -145,6 +145,16 @@ fn renderSemaError(
     meta: fluent.SemaErrorMeta,
 ) RenderError!blox.Div {
     return switch (meta) {
+        .unknown_name => |unk| try mason.newBox(&.{
+            try errorDesc(mason, .type, try mason.newBox(&.{
+                try mason.newPre("unknown name ", .{}),
+                try fluent.env.renderName(mason, unk.name),
+                try mason.newPre(" in scope ", .{}),
+                try fluent.env.renderName(mason, unk.scope),
+            }, span)),
+            try unk.loc.render(mason),
+        }, .{}),
+
         .expected => |exp| try mason.newBox(&.{
             try errorDesc(mason, .type, try mason.newBox(&.{
                 try mason.newPre("expected ", .{}),
@@ -215,7 +225,7 @@ fn renderFieldData(
 
             break :nodes try mason.newBox(divs.items, .{});
         },
-        []const Ast.Expr.RecordEntry => kvs: {
+        []const Ast.Expr.KV => kvs: {
             const entry_tag = try mason.newPre("entry", .{ .fg = theme.tag });
             const indent = try mason.newSpacer(2, 1, .{});
 
@@ -269,7 +279,7 @@ pub fn render(
         tag,
         try mason.newPre(" <", .{}),
         typing,
-        try mason.newPre(">", .{}),
+        try mason.newPre("> ", .{}),
     }, span);
 
     return switch (expr) {
@@ -277,7 +287,10 @@ pub fn render(
         .bool,
         .number,
         .ident,
-        => |data| try renderFieldData(self, mason, @TypeOf(data), data),
+        => |data| try mason.newBox(&.{
+            label,
+            try renderFieldData(self, mason, @TypeOf(data), data),
+        }, span),
 
         inline .parens,
         .record,

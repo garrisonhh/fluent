@@ -3,16 +3,14 @@ const Allocator = std.mem.Allocator;
 const fluent = @import("../mod.zig");
 const typer = fluent.typer;
 const ssa = fluent.ssa;
+const Type = fluent.Type;
 const Local = ssa.Local;
 const Block = ssa.Block;
 const Func = ssa.Func;
 const Object = ssa.Object;
 const Jit = @import("x86-jit").Jit;
 
-// register mapping ============================================================
-
-const RETURN_REG: Jit.Register = .rax;
-const PHI_REG: Jit.Register = .rdx;
+// location mapping ============================================================
 
 const Target = union(enum) {
     reg: Jit.Register,
@@ -37,7 +35,13 @@ const LocMap = struct {
     }
 };
 
-/// maps ssa locals to their register or stack locations
+const RETURN_REG: Jit.Register = .rax;
+const PHI_REG: Jit.Register = .rdx;
+
+// TODO add r8, r9 when jit supports it
+const PARAM_REGISTERS = [4]Jit.Register{ .rdi, .rsi, .rdx, .rcx };
+
+/// maps ssa locals to register or stack locations
 ///
 /// TODO currently this just places everything on the stack in sequence which is
 /// incredibly stupid
@@ -131,7 +135,7 @@ const Context = struct {
         return self.map.get(.{ .func = func, .block = block }).?;
     }
 
-    fn typeOf(self: Self, func: Func.Ref, local: Local) fluent.Type.Id {
+    fn typeOf(self: Self, func: Func.Ref, local: Local) Type.Id {
         const func_ptr = self.object.funcs.get(func);
         return func_ptr.locals.get(local);
     }
@@ -219,8 +223,6 @@ fn assembleOp(
     bb: *Jit.BlockBuilder,
     op: ssa.Op,
 ) Error!void {
-    const dst_loc = locmap.locs.get(op.dest).?;
-
     switch (op.inst) {
         .constant => |val| {
             const bytes = try fluent.env.get(val).asBytes(bb.arena_ally);
@@ -233,9 +235,25 @@ fn assembleOp(
                 .constant = .{ .bytes = const_bytes, .dst = .rax },
             });
 
-            const size = Jit.Op.Size.from(bytes.len).?;
-            try mov(bb, size, .{ .reg = .rax }, dst_loc.target);
+            try movToLocal(locmap, bb, .{ .reg = .rax }, op.dest);
         },
+
+        inline .add, .sub => |args, inst| {
+            const jit_op: std.meta.Tag(Jit.Op) = comptime switch (inst) {
+                .add => .add,
+                .sub => .sub,
+                else => unreachable,
+            };
+
+            try movLocalTo(locmap, bb, args[0], .{ .reg = .rdx });
+            try movLocalTo(locmap, bb, args[1], .{ .reg = .rax });
+            try bb.op(@unionInit(Jit.Op, @tagName(jit_op), .{
+                .src = .rdx,
+                .dst = .rax,
+            }));
+            try movToLocal(locmap, bb, .{ .reg = .rax }, op.dest);
+        },
+
         else => std.debug.panic("TODO assemble {s}", .{@tagName(op.inst)}),
     }
 }
@@ -301,6 +319,16 @@ fn assembleFunc(
     // add SysV setup to entry block
     const entry = ctx.get(func_ref, func.entry);
     try entry.op(.{ .enter = locmap.frame_size });
+
+    // load params in entry block
+    for (func.params, 0..) |local, i| {
+        if (i < PARAM_REGISTERS.len) {
+            const target = Target{ .reg = PARAM_REGISTERS[i] };
+            try movToLocal(locmap, entry, target, local);
+        } else {
+            @panic("TODO functions with stack parameters");
+        }
+    }
 
     // assemble behavior for all blocks
     var block_iter = func.blocks.iterator();

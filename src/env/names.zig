@@ -68,6 +68,11 @@ pub fn slice(name: Name) []const Ident {
 pub fn intern(ally: Allocator, buf: []const Ident) Allocator.Error!Name {
     const res = try set.getOrPut(ally, buf);
     if (!res.found_existing) {
+        // recursively insert names down to root to ensure drop can't fail
+        if (buf.len > 1) {
+            _ = try intern(ally, buf[0 .. buf.len - 1]);
+        }
+
         const owned = try ally.dupe(Ident, buf);
         const name = try names.put(ally, owned);
 
@@ -78,12 +83,13 @@ pub fn intern(ally: Allocator, buf: []const Ident) Allocator.Error!Name {
     return res.value_ptr.*;
 }
 
-/// attempts to drop an identifier from the name
-pub fn drop(ally: Allocator, name: Name) Allocator.Error!?Name {
+/// drops an identifier from the name
+pub fn drop(name: Name) ?Name {
     const buf = slice(name);
     if (buf.len == 0) return null;
 
-    return try intern(ally, buf[0 .. buf.len - 1]);
+    // guaranteed to by intern behavior
+    return set.get(buf).?;
 }
 
 /// adds an identifier to the name

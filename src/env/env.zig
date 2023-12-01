@@ -18,7 +18,7 @@ const TypeNameMap = std.AutoHashMapUnmanaged(Type.Id, Name);
 const CompiledMap = std.AutoHashMapUnmanaged(Name, Jit.Label);
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const ally = gpa.allocator();
+pub const ally = gpa.allocator();
 
 var values: Value.RefList = .{};
 /// pub for rendering only, don't touch this directly

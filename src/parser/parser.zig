@@ -345,9 +345,38 @@ fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
         return errorExpectedDesc(ast, lexer, "function name");
     };
 
-    const params = try inner_parser(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "function parameters");
+    _ = try expectToken(ast, lexer, .lparen);
+
+    var params = std.ArrayList(Ast.Expr.KV).init(ast.ally);
+    defer params.deinit();
+
+    const pk = try lexer.peek() orelse {
+        return errorUnexpectedEof(ast, lexer);
     };
+
+    if (pk.tag == .rparen) {
+        lexer.accept(pk);
+    } else while (true) {
+        const param_name = try parseExpr(ast, lexer) orelse {
+            const desc = "parameter name";
+            return errorExpectedDesc(ast, lexer, desc);
+        };
+
+        _ = try expectToken(ast, lexer, .colon);
+
+        const param_type = try parseExpr(ast, lexer) orelse {
+            const desc = "parameter type";
+            return errorExpectedDesc(ast, lexer, desc);
+        };
+
+        try params.append(.{
+            .key = param_name,
+            .value = param_type,
+        });
+
+        const next = try expectOneOf(ast, lexer, &.{ .comma, .rparen });
+        if (next.tag == .rparen) break;
+    }
 
     const returns = try inner_parser(ast, lexer) orelse {
         return errorExpectedDesc(ast, lexer, "function return type");
@@ -362,7 +391,7 @@ fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     return try ast.new(@"fn".loc, .{
         .@"fn" = .{
             .name = name,
-            .params = params,
+            .params = try params.toOwnedSlice(),
             .returns = returns,
             .body = body,
         },
@@ -451,7 +480,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
         .lcurly => curlys: {
             lexer.accept(pk);
 
-            var entries = std.ArrayList(Ast.Expr.RecordEntry).init(ally);
+            var entries = std.ArrayList(Ast.Expr.KV).init(ally);
             defer entries.deinit();
 
             // empty curlys

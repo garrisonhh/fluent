@@ -9,6 +9,12 @@ const env = fluent.env;
 const ssa = fluent.ssa;
 const typer = fluent.typer;
 
+const Symbol = union(enum) {
+    param: ssa.Local,
+};
+
+const SymbolTable = fluent.ScopedMap(Symbol);
+
 pub const Error = Allocator.Error || Ast.Expr.Number.ParseError;
 
 /// sugar for creating a value ref and lowering it as a constant op
@@ -63,31 +69,38 @@ fn lowerNumber(
 
 fn lowerFunction(
     ast: *const Ast,
+    st: *SymbolTable,
     builder: *ssa.Builder,
-    name_node: ?Ast.Node,
-    params: Ast.Node,
+    name_node: Ast.Node,
     body: Ast.Node,
 ) Error!ssa.Func.Ref {
     // TODO this is a dirty hack
-    const name: ?Name = if (name_node) |nnode| name: {
-        const name_ident = ast.get(nnode).ident;
-        break :name try env.name(&.{name_ident});
-    } else null;
+    const name_ident = ast.get(name_node).ident;
+    const name = try env.name(&.{name_ident});
+    const func_val = env.lookup(name).?;
+    const func_def = env.get(func_val).fn_def;
+
+    try st.enterScope(name_ident);
+    defer st.exitScope();
 
     var func = try builder.func(name);
 
     // add params
-    const params_type = ast.getType(params);
-    const param_types = typer.get(params_type).@"struct".fields;
-    for (param_types) |param_type| {
-        _ = try func.param(param_type);
+    var param_iter = func_def.params.iterator();
+    while (param_iter.next()) |entry| {
+        const param_ident = entry.key_ptr.*;
+        const param_name = try env.name(&.{param_ident});
+        const param_t = entry.value_ptr.*;
+
+        const param_local = try func.param(param_t);
+        try st.put(param_name, .{ .param = param_local });
     }
 
     // compile body
     var block = try func.block(null);
     func.entry = block.ref;
 
-    const val = try lowerExpr(ast, &block, body);
+    const val = try lowerExpr(ast, st, &block, body);
     try block.branch(.{ .ret = val });
 
     func.exit = block.ref;
@@ -97,6 +110,7 @@ fn lowerFunction(
 
 fn lowerExpr(
     ast: *const Ast,
+    st: *SymbolTable,
     block: **ssa.BlockBuilder,
     node: Ast.Node,
 ) Error!ssa.Local {
@@ -105,12 +119,19 @@ fn lowerExpr(
         .unit => try lowerConstant(block.*, t, .unit),
         .bool => |b| try lowerConstant(block.*, t, .{ .bool = b }),
         .number => |n| try lowerNumber(block.*, t, n),
-        .ident => @panic("TODO lower ident"),
+        .ident => |id| ident: {
+            const name = try env.name(&.{id});
+            const sym = (try st.get(name)).?;
+
+            break :ident switch (sym) {
+                .param => |local| local,
+            };
+        },
 
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
-                try lowerExpr(ast, block, bin.lhs),
-                try lowerExpr(ast, block, bin.rhs),
+                try lowerExpr(ast, st, block, bin.lhs),
+                try lowerExpr(ast, st, block, bin.rhs),
             };
 
             const inst: ssa.Instruction = switch (bin.op) {
@@ -133,7 +154,7 @@ fn lowerExpr(
             const next = try func.block(t);
 
             // lower cond + branch op
-            const cond = try lowerExpr(ast, block, @"if".cond);
+            const cond = try lowerExpr(ast, st, block, @"if".cond);
             try block.*.branch(.{
                 .branch = .{
                     .cond = cond,
@@ -144,13 +165,13 @@ fn lowerExpr(
 
             // lower branches
             block.* = if_true;
-            const if_true_val = try lowerExpr(ast, block, @"if".if_true);
+            const if_true_val = try lowerExpr(ast, st, block, @"if".if_true);
             try block.*.branch(.{
                 .jump = .{ .phi = if_true_val, .to = next.ref },
             });
 
             block.* = if_false;
-            const if_false_val = try lowerExpr(ast, block, @"if".if_false);
+            const if_false_val = try lowerExpr(ast, st, block, @"if".if_false);
             try block.*.branch(.{
                 .jump = .{ .phi = if_false_val, .to = next.ref },
             });
@@ -172,6 +193,7 @@ fn lowerExpr(
 pub fn lower(
     ally: Allocator,
     ast: *const Ast,
+    scope: Name,
     prog_node: Ast.Node,
 ) Error!ssa.Object {
     const prog_expr = ast.get(prog_node);
@@ -180,14 +202,17 @@ pub fn lower(
     var builder = ssa.Builder.init(ally);
     errdefer builder.errdeinit();
 
+    var st = SymbolTable.init(ally, scope);
+    defer st.deinit();
+
     for (prog_expr.program) |decl| {
         switch (ast.get(decl).*) {
             .@"fn" => |@"fn"| {
                 _ = try lowerFunction(
                     ast,
+                    &st,
                     &builder,
                     @"fn".name,
-                    @"fn".params,
                     @"fn".body,
                 );
             },

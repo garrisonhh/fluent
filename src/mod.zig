@@ -1,5 +1,9 @@
 //! forwarded namespaces for module
 
+const scoped_map = @import("lib/scoped_map.zig");
+pub const ScopedMap = scoped_map.ScopedMap;
+pub const ScopedMapUnmanaged = scoped_map.ScopedMapUnmanaged;
+
 pub const Ast = @import("ast/Ast.zig");
 
 pub const Type = @import("types/type.zig").Type;
