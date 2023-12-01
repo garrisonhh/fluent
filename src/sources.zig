@@ -4,13 +4,17 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const com = @import("common");
+const fluent = @import("mod.zig");
+const env = fluent.env;
+const Name = fluent.Name;
 const rendering = @import("rendering.zig");
 
 pub const Source = com.Ref(.source, 16);
 const SourceMap = com.RefMap(Source, File);
 
 pub const File = struct {
-    name: []const u8,
+    filename: []const u8,
+    name: Name,
     text: []const u8,
 };
 
@@ -21,7 +25,6 @@ pub const Loc = packed struct(u64) {
     line_index: u32,
     char_index: u16,
 
-    pub const RenderError = rendering.RenderError;
     pub const render = rendering.renderLoc;
 
     pub fn lineno(self: Self) usize {
@@ -46,12 +49,15 @@ pub const Loc = packed struct(u64) {
     }
 };
 
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const ally = gpa.allocator();
+
 var map = SourceMap{};
 
-pub fn deinit(ally: Allocator) void {
+pub fn deinit() void {
     var sources = map.iterator();
     while (sources.next()) |f| {
-        ally.free(f.name);
+        ally.free(f.filename);
         ally.free(f.text);
     }
 
@@ -60,16 +66,20 @@ pub fn deinit(ally: Allocator) void {
     // reset for tests
     if (builtin.is_test) {
         map = .{};
+        gpa = .{};
     }
 }
 
-pub fn add(
-    ally: Allocator,
-    name: []const u8,
-    text: []const u8,
-) Allocator.Error!Source {
+/// create a canonical namespace name from the filename
+fn canonicalName(filename: []const u8) Allocator.Error!Name {
+    const dot = std.mem.indexOf(u8, filename, ".") orelse filename.len;
+    return try env.nameFromStr(filename[0..dot]);
+}
+
+pub fn add(filename: []const u8, text: []const u8) Allocator.Error!Source {
     return try map.put(ally, .{
-        .name = try ally.dupe(u8, name),
+        .filename = try ally.dupe(u8, filename),
+        .name = try canonicalName(filename),
         .text = try ally.dupe(u8, text),
     });
 }
@@ -78,21 +88,22 @@ pub fn get(src: Source) *const File {
     return map.get(src);
 }
 
-var test_source: ?Source = null;
-
 /// sometimes in tests you need to create an ast node but you don't have a
 /// source
-pub fn testLoc(ally: Allocator) Allocator.Error!Loc {
-    if (test_source == null) {
-        test_source = try add(
-            ally,
+pub fn testLoc() Allocator.Error!Loc {
+    const Ns = struct {
+        var test_source: ?Source = null;
+    };
+
+    if (Ns.test_source == null) {
+        Ns.test_source = try add(
             "virtual-test-source.fl",
             "this is a virtual test source file",
         );
     }
 
     return Loc{
-        .source = test_source.?,
+        .source = Ns.test_source.?,
         .line_index = 0,
         .char_index = 0,
     };

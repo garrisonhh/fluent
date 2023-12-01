@@ -49,9 +49,7 @@ const builtin = @import("builtin");
 const options = @import("options");
 const blox = @import("blox");
 
-pub fn init(ally: Allocator) Allocator.Error!void {
-    _ = ally;
-
+pub fn init() Allocator.Error!void {
     // log options if requested
     if (options.log_options) {
         const logger = std.log.scoped(.options);
@@ -70,9 +68,9 @@ pub fn init(ally: Allocator) Allocator.Error!void {
     env.init();
 }
 
-pub fn deinit(ally: Allocator) void {
-    sources.deinit(ally);
+pub fn deinit() void {
     env.deinit();
+    sources.deinit();
     typer.deinit();
 }
 

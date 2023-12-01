@@ -2,10 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const blox = @import("blox");
 const fluent = @import("mod.zig");
-const Loc = fluent.Loc;
 const sources = fluent.sources;
-
-pub const RenderError = blox.Error || std.fmt.AllocPrintError;
+const Loc = fluent.Loc;
 
 const theme = struct {
     const c = blox.Color.init;
@@ -67,7 +65,7 @@ fn collectContext(loc: Loc) RenderLocContext {
     });
 
     return RenderLocContext{
-        .filename = file.name,
+        .filename = file.filename,
         .lineno_render_width = lineno_render_width,
         .before = before,
         .this = this.?,
@@ -75,7 +73,7 @@ fn collectContext(loc: Loc) RenderLocContext {
     };
 }
 
-fn renderAt(mason: *blox.Mason, loc: Loc) RenderError!blox.Div {
+fn renderAt(mason: *blox.Mason, loc: Loc) blox.Error!blox.Div {
     const ally = mason.ally;
 
     const text = try std.fmt.allocPrint(ally, "{}", .{loc});
@@ -92,7 +90,7 @@ fn renderLine(
     mason: *blox.Mason,
     r: RenderLocContext,
     line: RenderLocContext.Line,
-) RenderError!blox.Div {
+) blox.Error!blox.Div {
     const ally = mason.ally;
 
     const lineno_text = try std.fmt.allocPrint(ally, "{d}", .{line.lineno});
@@ -123,7 +121,7 @@ fn renderArrow(
 }
 
 /// renders a source location with context
-pub fn renderLoc(loc: Loc, mason: *blox.Mason) RenderError!blox.Div {
+pub fn renderLoc(loc: Loc, mason: *blox.Mason) blox.Error!blox.Div {
     const ally = mason.ally;
 
     var divs = std.ArrayList(blox.Div).init(ally);

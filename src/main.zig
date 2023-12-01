@@ -11,7 +11,8 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     defer mason.deinit();
 
     // print source
-    try writer.print("[src]\n{s}\n", .{fluent.sources.get(source).text});
+    const file = fluent.sources.get(source);
+    try writer.print("[src]\n{s}\n", .{file.text});
 
     // parse
     var ast = fluent.Ast.init(ally);
@@ -31,9 +32,7 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
 
     // analyze
     // TODO programmatically create name for source
-    const scope_name = try fluent.env.nameFromStr("main");
-
-    switch (try fluent.analyze(&ast, scope_name, root)) {
+    switch (try fluent.analyze(&ast, file.name, root)) {
         .ok => {},
         .fail => {
             for (ast.getErrors()) |err| {
@@ -54,7 +53,7 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     try writer.context.flush();
 
     // lower to ssa
-    var ssa_object = try fluent.lower(ally, &ast, scope_name, root);
+    var ssa_object = try fluent.lower(ally, &ast, file.name, root);
     defer ssa_object.deinit(ally);
 
     // render ssa
@@ -77,8 +76,8 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const ally = gpa.allocator();
 
-    try fluent.init(ally);
-    defer fluent.deinit(ally);
+    try fluent.init();
+    defer fluent.deinit();
 
     // test source
     const text =
@@ -86,7 +85,7 @@ pub fn main() !void {
         \\  a + b
         \\
     ;
-    const source = try fluent.sources.add(ally, "test", text);
+    const source = try fluent.sources.add("test", text);
 
     // debug compile
     const stdout_writer = std.io.getStdOut().writer();
