@@ -11,8 +11,8 @@
             .hash = "1220b0f9e263a71b08b4ea173a7b34ae7e53ae51dd143243bf272fa463e036221d11",
         },
         .@"x86-jit" = .{
-            .url = "https://github.com/garrisonhh/x86-jit/tarball/d059fe59e8052f6a77234e742a27e9dbd11b9b1c",
-            .hash = "12207a3e07586de38537b08f7ad2f51267e47ccf5861374bcb77c3d4cf08916a475d",
+            .url = "https://github.com/garrisonhh/x86-jit/tarball/457bc842a218592ac4b1a639777dd118f9f92d24",
+            .hash = "12201c60c4eddfdd2152af17aca0d380463a1f1f715d79985c8844d932d0a33f7b39",
         },
     },
 }

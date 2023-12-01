@@ -51,27 +51,17 @@ fn renderOp(
     const comma = try mason.newPre(", ", .{});
 
     var buf: [64]u8 = undefined;
-    const code_text = try std.fmt.bufPrint(&buf, "{s} ", .{@tagName(op.code)});
-    const code_tag = try mason.newPre(code_text, .{ .fg = theme.opcode });
+    const inst_text = try std.fmt.bufPrint(&buf, "{s} ", .{@tagName(op.inst)});
+    const inst_tag = try mason.newPre(inst_text, .{ .fg = theme.opcode });
 
-    const code = switch (op.code) {
+    const inst = switch (op.inst) {
         .constant => |v| try fluent.env.renderValue(mason, v),
-
-        .branch => |br| try mason.newBox(&.{
-            code_tag,
-            try renderLocal(mason, func, br.cond),
-            comma,
-            try renderBlockRef(mason, br.if_true),
-            comma,
-            try renderBlockRef(mason, br.if_false),
-        }, span),
-
         .call => |call| call: {
             var divs = std.ArrayList(blox.Div).init(mason.ally);
             defer divs.deinit();
 
             try divs.appendSlice(&.{
-                code_tag,
+                inst_tag,
                 try renderFuncRef(mason, call.func),
             });
 
@@ -90,7 +80,7 @@ fn renderOp(
         .mod,
         .eq,
         => |data| try mason.newBox(&.{
-            code_tag,
+            inst_tag,
             try renderLocal(mason, func, data[0]),
             comma,
             try renderLocal(mason, func, data[1]),
@@ -100,8 +90,41 @@ fn renderOp(
     return try mason.newBox(&.{
         try renderLocal(mason, func, op.dest),
         try mason.newPre(" = ", .{}),
-        code,
+        inst,
     }, span);
+}
+
+fn renderBranch(
+    mason: *blox.Mason,
+    func: *const ssa.Func,
+    branch: ssa.Branch,
+) RenderError!blox.Div {
+    const comma = try mason.newPre(", ", .{});
+
+    var buf: [64]u8 = undefined;
+    const code_text = try std.fmt.bufPrint(&buf, "{s} ", .{@tagName(branch)});
+    const code_tag = try mason.newPre(code_text, .{ .fg = theme.opcode });
+
+    return switch (branch) {
+        .ret => |val| try mason.newBox(&.{
+            code_tag,
+            try renderLocal(mason, func, val),
+        }, span),
+        .jump => |jump| try mason.newBox(&.{
+            code_tag,
+            try renderLocal(mason, func, jump.phi),
+            comma,
+            try renderBlockRef(mason, jump.to),
+        }, span),
+        .branch => |br| try mason.newBox(&.{
+            code_tag,
+            try renderLocal(mason, func, br.cond),
+            comma,
+            try renderBlockRef(mason, br.if_true),
+            comma,
+            try renderBlockRef(mason, br.if_false),
+        }, span),
+    };
 }
 
 fn renderBlock(
@@ -114,17 +137,20 @@ fn renderBlock(
     var divs = std.ArrayList(blox.Div).init(mason.ally);
     defer divs.deinit();
 
+    if (block.phi) |phi| {
+        try divs.append(try mason.newBox(&.{
+            try mason.newPre("phi", .{ .fg = theme.meta }),
+            try mason.newSpacer(1, 1, .{}),
+            try renderLocal(mason, func, phi),
+        }, span));
+    }
+
     for (block.ops) |op| {
         const div = try renderOp(mason, func, op);
         try divs.append(div);
     }
 
-    // ret
-    try divs.append(try mason.newBox(&.{
-        try mason.newPre("ret", .{ .fg = theme.meta }),
-        try mason.newSpacer(1, 1, .{}),
-        try renderLocal(mason, func, block.retLocal()),
-    }, span));
+    try divs.append(try renderBranch(mason, func, block.branch));
 
     // stack it
     const label = try renderBlockRef(mason, ref);

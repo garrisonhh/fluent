@@ -10,14 +10,26 @@ const Value = fluent.Value;
 pub const Local = com.Ref(.ssa_local, 32);
 pub const LocalList = com.RefList(Local, Type.Id);
 
-pub const Opcode = union(enum) {
-    const Self = @This();
+/// an operation which jumps to another block
+pub const Branch = union(enum) {
+    pub const Jump = struct {
+        phi: Local,
+        to: Block.Ref,
+    };
 
-    pub const Branch = struct {
+    pub const Br = struct {
         cond: Local,
         if_true: Block.Ref,
         if_false: Block.Ref,
     };
+
+    jump: Jump,
+    ret: Local,
+    branch: Br,
+};
+
+pub const Instruction = union(enum) {
+    const Self = @This();
 
     pub const Call = struct {
         func: Func.Ref,
@@ -26,7 +38,6 @@ pub const Opcode = union(enum) {
     };
 
     constant: Value.Ref,
-    branch: Branch,
     call: Call,
 
     add: [2]Local,
@@ -45,15 +56,14 @@ pub const Opcode = union(enum) {
     }
 };
 
-/// instructions that operate on values
 pub const Op = struct {
     const Self = @This();
 
     dest: Local,
-    code: Opcode,
+    inst: Instruction,
 
     fn deinit(self: Self, ally: Allocator) void {
-        self.code.deinit(ally);
+        self.inst.deinit(ally);
     }
 };
 
@@ -62,16 +72,17 @@ pub const Block = struct {
     pub const Ref = com.Ref(.ssa_block, 32);
     pub const RefList = com.RefList(Ref, Self);
 
+    /// where this block receives values after being branched to (some blocks
+    /// don't need to receive a value, e.g. entry blocks)
+    phi: ?Local,
+    /// the computation
     ops: []const Op,
+    /// where this block goes next
+    branch: Branch,
 
     fn deinit(self: Self, ally: Allocator) void {
         for (self.ops) |op| op.deinit(ally);
         ally.free(self.ops);
-    }
-
-    /// the local returned by this block
-    pub fn retLocal(self: Self) Local {
-        return self.ops[self.ops.len - 1].dest;
     }
 };
 
@@ -83,6 +94,7 @@ pub const Func = struct {
     name: ?Name,
     type: Type.Id,
     entry: Block.Ref,
+    exit: Block.Ref,
     locals: LocalList,
     blocks: Block.RefList,
 
@@ -117,29 +129,48 @@ pub const BlockBuilder = struct {
     builder: *Builder,
     func: *FuncBuilder,
     ref: Block.Ref,
+    phi: ?Local,
     /// moved to block
     ops: std.ArrayListUnmanaged(Op) = .{},
+    /// moved to block
+    br: ?Branch = null,
 
     fn errdeinit(self: *Self) void {
         self.ops.deinit(self.builder.ally);
     }
 
     fn build(self: *Self) Allocator.Error!Block {
-        const ops = try self.ops.toOwnedSlice(self.builder.ally);
-        return Block{ .ops = ops };
+        std.debug.assert(self.br != null);
+        return Block{
+            .phi = self.phi,
+            .ops = try self.ops.toOwnedSlice(self.builder.ally),
+            .branch = self.br.?,
+        };
     }
 
     /// add an op to the block and returns the destination local
     ///
     /// *blocks always return the last opcode created*
-    pub fn op(self: *Self, t: Type.Id, code: Opcode) Allocator.Error!Local {
+    pub fn op(
+        self: *Self,
+        t: Type.Id,
+        inst: Instruction,
+    ) Allocator.Error!Local {
+        std.debug.assert(self.br == null);
+
         const dest = try self.func.local(t);
         try self.ops.append(self.builder.ally, Op{
             .dest = dest,
-            .code = code,
+            .inst = inst,
         });
 
         return dest;
+    }
+
+    /// add a branch to the block, finalizing the block
+    pub fn branch(self: *Self, br: Branch) Allocator.Error!void {
+        std.debug.assert(self.br == null);
+        self.br = br;
     }
 };
 
@@ -150,6 +181,7 @@ pub const FuncBuilder = struct {
     name: ?Name,
     ref: Func.Ref,
     entry: ?Block.Ref = null,
+    exit: ?Block.Ref = null,
     params: std.ArrayListUnmanaged(Local) = .{},
     block_builders: std.ArrayListUnmanaged(*BlockBuilder) = .{},
     /// moved to func
@@ -179,7 +211,8 @@ pub const FuncBuilder = struct {
             slot.* = self.locals.get(param_local).*;
         }
 
-        const ret_local = self.blocks.get(self.entry.?).retLocal();
+        std.debug.assert(self.blocks.get(self.exit.?).branch == .ret);
+        const ret_local = self.blocks.get(self.exit.?).branch.ret;
         const returns = self.locals.get(ret_local).*;
 
         const func_type = try fluent.typer.put(.{
@@ -193,6 +226,7 @@ pub const FuncBuilder = struct {
             .name = self.name,
             .type = func_type,
             .entry = self.entry.?,
+            .exit = self.exit.?,
             .locals = self.locals,
             .blocks = self.blocks,
         };
@@ -212,10 +246,11 @@ pub const FuncBuilder = struct {
     }
 
     /// add a new block to the function
-    ///
-    /// *the first block created is assumed to be the entry block*
-    pub fn block(self: *Self) Allocator.Error!*BlockBuilder {
+    pub fn block(self: *Self, phi: ?Type.Id) Allocator.Error!*BlockBuilder {
         const arena_ally = self.builder.arena.allocator();
+
+        const phi_local: ?Local =
+            if (phi) |phi_t| try self.local(phi_t) else null;
 
         const ref = try self.blocks.new(self.builder.ally);
         const bb = try arena_ally.create(BlockBuilder);
@@ -223,13 +258,10 @@ pub const FuncBuilder = struct {
             .builder = self.builder,
             .func = self,
             .ref = ref,
+            .phi = phi_local,
         };
 
         try self.block_builders.append(arena_ally, bb);
-
-        if (self.entry == null) {
-            self.entry = ref;
-        }
 
         return bb;
     }

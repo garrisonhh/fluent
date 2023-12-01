@@ -6,11 +6,10 @@ in order to get the jit assembler running quickl;y
 
 ## codegen conventions
 
-### 'block call'
+### block return values
 
-since blocks represent expressions which return values, it makes sense to treat
-blocks as procedures. blocks use the same stack as their owning function, but
-use x86 `call` and `ret`, returning their value through `%rax`.
+blocks use the same stack as their owning function. phi values are moved through
+the `%rdx` register, since `%rax` is clobbered by call and jump ops.
 
 ### function call convention
 

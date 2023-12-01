@@ -78,7 +78,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\fn useless {} u64 -> 42
+        \\fn useless {} u64 -> if true then 42 else 24
         \\
     ;
     const source = try fluent.sources.add(ally, "test", text);
@@ -92,7 +92,7 @@ pub fn main() !void {
 
     // attempt to run the function
     const func_name = try fluent.env.nameFromStr("useless");
-    const F = fn() callconv(.SysV) i32;
+    const F = fn () callconv(.SysV) i32;
     const func = fluent.env.getCompiled(func_name, F).?;
     const res = func();
 

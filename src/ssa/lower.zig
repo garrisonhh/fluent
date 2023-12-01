@@ -61,18 +61,6 @@ fn lowerNumber(
     return try lowerConstant(block, t, init_value);
 }
 
-/// lower an expr to its own block
-fn lowerBlockExpr(
-    ast: *const Ast,
-    func: *ssa.FuncBuilder,
-    node: Ast.Node,
-) Error!ssa.Block.Ref {
-    var block = try func.block();
-    _ = try lowerExpr(ast, block, node);
-
-    return block.ref;
-}
-
 fn lowerFunction(
     ast: *const Ast,
     builder: *ssa.Builder,
@@ -88,28 +76,35 @@ fn lowerFunction(
 
     var func = try builder.func(name);
 
-    // compile entry block
+    // add params
     const params_type = ast.getType(params);
     const param_types = typer.get(params_type).@"struct".fields;
     for (param_types) |param_type| {
         _ = try func.param(param_type);
     }
 
-    _ = try lowerBlockExpr(ast, func, body);
+    // compile body
+    var block = try func.block(null);
+    func.entry = block.ref;
+
+    const val = try lowerExpr(ast, &block, body);
+    try block.branch(.{ .ret = val });
+
+    func.exit = block.ref;
 
     return func.ref;
 }
 
 fn lowerExpr(
     ast: *const Ast,
-    block: *ssa.BlockBuilder,
+    block: **ssa.BlockBuilder,
     node: Ast.Node,
 ) Error!ssa.Local {
     const t = ast.getType(node);
     return switch (ast.get(node).*) {
-        .unit => try lowerConstant(block, t, .unit),
-        .bool => |b| try lowerConstant(block, t, .{ .bool = b }),
-        .number => |n| try lowerNumber(block, t, n),
+        .unit => try lowerConstant(block.*, t, .unit),
+        .bool => |b| try lowerConstant(block.*, t, .{ .bool = b }),
+        .number => |n| try lowerNumber(block.*, t, n),
         .ident => @panic("TODO lower ident"),
 
         .binary => |bin| bin: {
@@ -118,7 +113,7 @@ fn lowerExpr(
                 try lowerExpr(ast, block, bin.rhs),
             };
 
-            const data: ssa.Opcode = switch (bin.op) {
+            const inst: ssa.Instruction = switch (bin.op) {
                 .add => .{ .add = args },
                 .subtract => .{ .sub = args },
                 .multiply => .{ .mul = args },
@@ -128,21 +123,42 @@ fn lowerExpr(
                 else => @panic("TODO"),
             };
 
-            break :bin try block.op(t, data);
+            break :bin try block.*.op(t, inst);
         },
 
         .@"if" => |@"if"| @"if": {
-            const cond = try lowerExpr(ast, block, @"if".cond);
-            const if_true = try lowerBlockExpr(ast, block.func, @"if".if_true);
-            const if_false = try lowerBlockExpr(ast, block.func, @"if".if_false);
+            const func = block.*.func;
+            const if_true = try func.block(null);
+            const if_false = try func.block(null);
+            const next = try func.block(t);
 
-            break :@"if" try block.op(t, .{
+            // lower cond + branch op
+            const cond = try lowerExpr(ast, block, @"if".cond);
+            try block.*.branch(.{
                 .branch = .{
                     .cond = cond,
-                    .if_true = if_true,
-                    .if_false = if_false,
+                    .if_true = if_true.ref,
+                    .if_false = if_false.ref,
                 },
             });
+
+            // lower branches
+            block.* = if_true;
+            const if_true_val = try lowerExpr(ast, block, @"if".if_true);
+            try block.*.branch(.{
+                .jump = .{ .phi = if_true_val, .to = next.ref },
+            });
+
+            block.* = if_false;
+            const if_false_val = try lowerExpr(ast, block, @"if".if_false);
+            try block.*.branch(.{
+                .jump = .{ .phi = if_false_val, .to = next.ref },
+            });
+
+            // switch to next block
+            block.* = next;
+
+            break :@"if" next.phi.?;
         },
 
         else => |tag| {
