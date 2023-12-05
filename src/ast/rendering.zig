@@ -66,80 +66,6 @@ fn simpleError(
     }, .{});
 }
 
-fn renderSyntaxError(
-    mason: *blox.Mason,
-    meta: fluent.SyntaxErrorMeta,
-) RenderError!blox.Div {
-    return switch (meta) {
-        .unexpected_eof => |loc| try simpleError(
-            mason,
-            .syntax,
-            loc,
-            "unexpected EOF",
-            .{},
-        ),
-
-        .invalid_literal => |il| try simpleError(
-            mason,
-            .syntax,
-            il.loc,
-            "invalid {s} literal",
-            .{@tagName(il.tag)},
-        ),
-
-        .expected_op_expr => |exp| try simpleError(
-            mason,
-            .syntax,
-            exp.loc,
-            "expected expression for operator `{s}`",
-            .{exp.operator},
-        ),
-
-        .expected_token => |exp| try simpleError(
-            mason,
-            .syntax,
-            exp.loc,
-            "expected {s}",
-            .{@tagName(exp.tag)},
-        ),
-
-        .expected_one_of => |exp| e: {
-            var list = std.ArrayList(u8).init(mason.ally);
-            defer list.deinit();
-            const writer = list.writer();
-
-            std.debug.assert(exp.tags.len >= 2);
-
-            const tags = exp.tags;
-
-            for (tags[0 .. tags.len - 2]) |tag| {
-                try writer.print("{s}, ", .{@tagName(tag)});
-            }
-
-            try writer.print("{s} or {s}", .{
-                @tagName(tags[tags.len - 2]),
-                @tagName(tags[tags.len - 1]),
-            });
-
-            break :e try simpleError(
-                mason,
-                .syntax,
-                exp.loc,
-                "expected one of {s}",
-                .{list.items},
-            );
-        },
-
-        .expected_desc => |exp| try simpleError(
-            mason,
-            .syntax,
-            exp.loc,
-            "expected {s}",
-            .{exp.desc},
-        ),
-    };
-}
-
 fn renderSemaError(
     mason: *blox.Mason,
     meta: fluent.SemaErrorMeta,
@@ -176,16 +102,6 @@ fn renderSemaError(
             try mason.newPre("this would match the expression here", .{}),
             try exp.expected_loc.render(mason),
         }, .{}),
-    };
-}
-
-pub fn renderAstError(
-    self: Ast.Error,
-    mason: *blox.Mason,
-) RenderError!blox.Div {
-    return switch (self) {
-        .syntax => |meta| try renderSyntaxError(mason, meta),
-        .semantic => |meta| try renderSemaError(mason, meta),
     };
 }
 

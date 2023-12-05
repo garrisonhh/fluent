@@ -42,7 +42,7 @@ pub const Loc = packed struct(u64) {
         writer: anytype,
     ) @TypeOf(writer).Error!void {
         try writer.print("{s}:{d}:{d}", .{
-            get(self.source).name,
+            get(self.source).filename,
             self.lineno(),
             self.charno(),
         });

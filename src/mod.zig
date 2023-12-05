@@ -3,6 +3,7 @@
 const scoped_map = @import("lib/scoped_map.zig");
 pub const ScopedMap = scoped_map.ScopedMap;
 pub const ScopedMapUnmanaged = scoped_map.ScopedMapUnmanaged;
+pub const ErrorBuf = @import("lib/error_buf.zig").ErrorBuf;
 
 pub const Ast = @import("ast/Ast.zig");
 
@@ -20,8 +21,8 @@ pub const Loc = sources.Loc;
 
 const parser = @import("parser/parser.zig");
 pub const SyntaxErrorMeta = parser.SyntaxErrorMeta;
+pub const SyntaxErrorBuf = parser.SyntaxErrorBuf;
 pub const ParseError = parser.Error;
-pub const ParseInto = parser.Into;
 pub const parse = parser.parse;
 
 const sema = @import("sema/sema.zig");

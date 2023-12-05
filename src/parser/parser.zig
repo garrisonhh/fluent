@@ -7,16 +7,7 @@ const Loc = fluent.Loc;
 const env = fluent.env;
 const Lexer = @import("Lexer.zig");
 const Token = Lexer.Token;
-
-pub const Error =
-    Allocator.Error ||
-    Lexer.Error ||
-    blox.Error;
-
-const InvalidSyntaxError = error{InvalidSyntax};
-const ParseError = Error || InvalidSyntaxError;
-
-// syntax error helpers ========================================================
+const rendering = @import("rendering.zig");
 
 /// represents possible syntax errors
 pub const SyntaxErrorMeta = union(enum) {
@@ -55,27 +46,24 @@ pub const SyntaxErrorMeta = union(enum) {
     expected_one_of: ExpectedOneOf,
     expected_desc: ExpectedDesc,
 
-    pub fn deinit(self: Self, ally: Allocator) void {
-        _ = self;
-        _ = ally;
-    }
+    pub const render = rendering.renderSyntaxError;
 };
 
-fn invalidSyntax(ast: *Ast, meta: SyntaxErrorMeta) ParseError {
-    try ast.addError(.{ .syntax = meta });
-    return InvalidSyntaxError.InvalidSyntax;
-}
+pub const SyntaxErrorBuf = fluent.ErrorBuf(SyntaxErrorMeta, error.InvalidSyntax);
+const SyntaxError = SyntaxErrorBuf.Error;
 
-fn errorUnexpectedEof(ast: *Ast, lexer: *const Lexer) ParseError {
-    return invalidSyntax(ast, .{ .unexpected_eof = lexer.nextLoc() });
+pub const Error = Allocator.Error || Lexer.Error || SyntaxError;
+
+fn errorUnexpectedEof(ebuf: *SyntaxErrorBuf, lexer: *const Lexer) SyntaxError {
+    return ebuf.err(.{ .unexpected_eof = lexer.nextLoc() });
 }
 
 fn errorExpectedOpExpr(
-    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
     lexer: *const Lexer,
     operator_token: Token,
-) ParseError {
-    return invalidSyntax(ast, .{
+) SyntaxError {
+    return ebuf.err(.{
         .expected_op_expr = .{
             .loc = operator_token.loc,
             .operator = lexer.slice(operator_token),
@@ -83,8 +71,8 @@ fn errorExpectedOpExpr(
     });
 }
 
-fn errorInvalidLiteral(ast: *Ast, token: Token) ParseError {
-    return invalidSyntax(ast, .{
+fn errorInvalidLiteral(ebuf: *SyntaxErrorBuf, token: Token) SyntaxError {
+    return ebuf.err(.{
         .invalid_literal = .{
             .tag = token.tag,
             .loc = token.loc,
@@ -93,11 +81,11 @@ fn errorInvalidLiteral(ast: *Ast, token: Token) ParseError {
 }
 
 fn errorExpectedToken(
-    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
     lexer: *const Lexer,
     tag: Token.Tag,
-) ParseError {
-    return invalidSyntax(ast, .{
+) SyntaxError {
+    return ebuf.err(.{
         .expected_token = .{
             .loc = lexer.nextLoc(),
             .tag = tag,
@@ -106,11 +94,11 @@ fn errorExpectedToken(
 }
 
 fn errorExpectedOneOf(
-    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
     lexer: *const Lexer,
     tags: []const Token.Tag,
-) ParseError {
-    return invalidSyntax(ast, .{
+) SyntaxError {
+    return ebuf.err(.{
         .expected_one_of = .{
             .loc = lexer.nextLoc(),
             .tags = tags,
@@ -119,11 +107,11 @@ fn errorExpectedOneOf(
 }
 
 fn errorExpectedDesc(
-    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
     lexer: *const Lexer,
     desc: []const u8,
-) ParseError {
-    return invalidSyntax(ast, .{
+) SyntaxError {
+    return ebuf.err(.{
         .expected_desc = .{
             .loc = lexer.nextLoc(),
             .desc = desc,
@@ -133,7 +121,7 @@ fn errorExpectedDesc(
 
 // parsing =====================================================================
 
-fn parseToken(lexer: *Lexer, tag: Token.Tag) ParseError!?Token {
+fn parseToken(lexer: *Lexer, tag: Token.Tag) Lexer.Error!?Token {
     const token = try lexer.peek() orelse {
         return null;
     };
@@ -146,26 +134,26 @@ fn parseToken(lexer: *Lexer, tag: Token.Tag) ParseError!?Token {
     return token;
 }
 
-fn expectToken(ast: *Ast, lexer: *Lexer, tag: Token.Tag) ParseError!Token {
+fn expectToken(ebuf: *SyntaxErrorBuf, lexer: *Lexer, tag: Token.Tag) Error!Token {
     return try parseToken(lexer, tag) orelse
-        errorExpectedToken(ast, lexer, tag);
+        errorExpectedToken(ebuf, lexer, tag);
 }
 
 fn expectOneOf(
-    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
     lexer: *Lexer,
     tags: []const Token.Tag,
-) ParseError!Token {
+) Error!Token {
     for (tags) |tag| {
         if (try parseToken(lexer, tag)) |token| {
             return token;
         }
     }
 
-    return errorExpectedOneOf(ast, lexer, tags);
+    return errorExpectedOneOf(ebuf, lexer, tags);
 }
 
-const ParserFn = fn (*Ast, *Lexer) ParseError!?Ast.Node;
+const ParserFn = fn (*Ast, *SyntaxErrorBuf, *Lexer) Error!?Ast.Node;
 
 /// a unary prefix parser
 fn unaryPrefixParser(
@@ -175,8 +163,9 @@ fn unaryPrefixParser(
     return struct {
         fn prefixParser(
             ast: *Ast,
+            ebuf: *SyntaxErrorBuf,
             lexer: *Lexer,
-        ) ParseError!?Ast.Node {
+        ) Error!?Ast.Node {
             // parse unary ops
             var ops = std.ArrayList(Token).init(ast.ally);
             defer ops.deinit();
@@ -197,14 +186,14 @@ fn unaryPrefixParser(
             }
 
             // parse inner
-            var expr = try inner_parser(ast, lexer) orelse {
+            var expr = try inner_parser(ast, ebuf, lexer) orelse {
                 if (ops.items.len == 0) {
                     // nothing was parsed
                     return null;
                 }
 
                 // an inner expression was expected
-                return errorExpectedOpExpr(ast, lexer, ops.getLast());
+                return errorExpectedOpExpr(ebuf, lexer, ops.getLast());
             };
 
             // create unary stuff
@@ -227,8 +216,12 @@ fn binaryLeftPrecedenceParser(
     comptime inner_parser: ParserFn,
 ) ParserFn {
     return struct {
-        fn parser(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-            var lhs = try inner_parser(ast, lexer) orelse {
+        fn parser(
+            ast: *Ast,
+            ebuf: *SyntaxErrorBuf,
+            lexer: *Lexer,
+        ) Error!?Ast.Node {
+            var lhs = try inner_parser(ast, ebuf, lexer) orelse {
                 return null;
             };
 
@@ -244,8 +237,8 @@ fn binaryLeftPrecedenceParser(
                 lexer.accept(pk);
 
                 // parse rhs
-                const rhs = try inner_parser(ast, lexer) orelse {
-                    return errorExpectedOpExpr(ast, lexer, pk);
+                const rhs = try inner_parser(ast, ebuf, lexer) orelse {
+                    return errorExpectedOpExpr(ebuf, lexer, pk);
                 };
 
                 // convert to ast node
@@ -269,8 +262,12 @@ fn binaryRightPrecedenceParser(
     comptime inner_parser: ParserFn,
 ) ParserFn {
     return struct {
-        fn parser(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-            var lhs = try inner_parser(ast, lexer) orelse {
+        fn parser(
+            ast: *Ast,
+            ebuf: *SyntaxErrorBuf,
+            lexer: *Lexer,
+        ) Error!?Ast.Node {
+            var lhs = try inner_parser(ast, ebuf, lexer) orelse {
                 return null;
             };
 
@@ -286,8 +283,8 @@ fn binaryRightPrecedenceParser(
             lexer.accept(pk);
 
             // parse rhs
-            const rhs = try binaryParser(ast, lexer) orelse {
-                return errorExpectedOpExpr(ast, lexer, pk);
+            const rhs = try binaryParser(ast, ebuf, lexer) orelse {
+                return errorExpectedOpExpr(ebuf, lexer, pk);
             };
 
             // convert to ast node
@@ -336,37 +333,37 @@ fn binaryOpFromTokenTag(tag: Token.Tag) ?Ast.BinaryOp {
     };
 }
 
-fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+fn parseFn(ast: *Ast, ebuf: *SyntaxErrorBuf, lexer: *Lexer) Error!?Ast.Node {
     const inner_parser = parsePrefixedName;
 
-    const @"fn" = try expectToken(ast, lexer, .@"fn");
+    const @"fn" = try expectToken(ebuf, lexer, .@"fn");
 
-    const name = try parseAtom(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "function name");
+    const name = try parseAtom(ast, ebuf, lexer) orelse {
+        return errorExpectedDesc(ebuf, lexer, "function name");
     };
 
-    _ = try expectToken(ast, lexer, .lparen);
+    _ = try expectToken(ebuf, lexer, .lparen);
 
     var params = std.ArrayList(Ast.Expr.KV).init(ast.ally);
     defer params.deinit();
 
     const pk = try lexer.peek() orelse {
-        return errorUnexpectedEof(ast, lexer);
+        return errorUnexpectedEof(ebuf, lexer);
     };
 
     if (pk.tag == .rparen) {
         lexer.accept(pk);
     } else while (true) {
-        const param_name = try parseExpr(ast, lexer) orelse {
+        const param_name = try parseExpr(ast, ebuf, lexer) orelse {
             const desc = "parameter name";
-            return errorExpectedDesc(ast, lexer, desc);
+            return errorExpectedDesc(ebuf, lexer, desc);
         };
 
-        _ = try expectToken(ast, lexer, .colon);
+        _ = try expectToken(ebuf, lexer, .colon);
 
-        const param_type = try parseExpr(ast, lexer) orelse {
+        const param_type = try parseExpr(ast, ebuf, lexer) orelse {
             const desc = "parameter type";
-            return errorExpectedDesc(ast, lexer, desc);
+            return errorExpectedDesc(ebuf, lexer, desc);
         };
 
         try params.append(.{
@@ -374,18 +371,18 @@ fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
             .value = param_type,
         });
 
-        const next = try expectOneOf(ast, lexer, &.{ .comma, .rparen });
+        const next = try expectOneOf(ebuf, lexer, &.{ .comma, .rparen });
         if (next.tag == .rparen) break;
     }
 
-    const returns = try inner_parser(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "function return type");
+    const returns = try inner_parser(ast, ebuf, lexer) orelse {
+        return errorExpectedDesc(ebuf, lexer, "function return type");
     };
 
-    _ = try expectToken(ast, lexer, .right_arrow);
+    _ = try expectToken(ebuf, lexer, .right_arrow);
 
-    const body = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "function body");
+    const body = try parseExpr(ast, ebuf, lexer) orelse {
+        return errorExpectedDesc(ebuf, lexer, "function body");
     };
 
     return try ast.new(@"fn".loc, .{
@@ -398,23 +395,23 @@ fn parseFn(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     });
 }
 
-fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
-    const @"if" = try expectToken(ast, lexer, .@"if");
+fn parseIf(ast: *Ast, ebuf: *SyntaxErrorBuf, lexer: *Lexer) Error!?Ast.Node {
+    const @"if" = try expectToken(ebuf, lexer, .@"if");
 
-    const cond = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "condition");
+    const cond = try parseExpr(ast, ebuf, lexer) orelse {
+        return errorExpectedDesc(ebuf, lexer, "condition");
     };
 
-    _ = try expectToken(ast, lexer, .then);
+    _ = try expectToken(ebuf, lexer, .then);
 
-    const if_true = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "'then' branch of if expression");
+    const if_true = try parseExpr(ast, ebuf, lexer) orelse {
+        return errorExpectedDesc(ebuf, lexer, "'then' branch of if expression");
     };
 
-    _ = try expectToken(ast, lexer, .@"else");
+    _ = try expectToken(ebuf, lexer, .@"else");
 
-    const if_false = try parseExpr(ast, lexer) orelse {
-        return errorExpectedDesc(ast, lexer, "'else' branch of if expression");
+    const if_false = try parseExpr(ast, ebuf, lexer) orelse {
+        return errorExpectedDesc(ebuf, lexer, "'else' branch of if expression");
     };
 
     return try ast.new(@"if".loc, .{
@@ -426,13 +423,13 @@ fn parseIf(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
     });
 }
 
-fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+fn parseAtom(ast: *Ast, ebuf: *SyntaxErrorBuf, lexer: *Lexer) Error!?Ast.Node {
     const ally = ast.ally;
     const pk = try lexer.peek() orelse return null;
     return switch (pk.tag) {
         // tokens with one possible result
-        .@"fn" => try parseFn(ast, lexer),
-        .@"if" => try parseIf(ast, lexer),
+        .@"fn" => try parseFn(ast, ebuf, lexer),
+        .@"if" => try parseIf(ast, ebuf, lexer),
 
         // atomic tokens
         .ident => ident: {
@@ -459,7 +456,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
             // unit
             const pk2 = try lexer.peek() orelse {
-                break :parens errorUnexpectedEof(ast, lexer);
+                break :parens errorUnexpectedEof(ebuf, lexer);
             };
             if (pk2.tag == .rparen) {
                 lexer.accept(pk2);
@@ -467,11 +464,11 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
             }
 
             // wrapped expr
-            const inner = try parseExpr(ast, lexer) orelse {
+            const inner = try parseExpr(ast, ebuf, lexer) orelse {
                 const desc = "inner expression for parentheses";
-                break :parens errorExpectedDesc(ast, lexer, desc);
+                break :parens errorExpectedDesc(ebuf, lexer, desc);
             };
-            _ = try expectToken(ast, lexer, .rparen);
+            _ = try expectToken(ebuf, lexer, .rparen);
 
             break :parens try ast.new(pk.loc, .{ .parens = inner });
         },
@@ -485,7 +482,7 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
             // empty curlys
             const pk2 = try lexer.peek() orelse {
-                break :curlys errorUnexpectedEof(ast, lexer);
+                break :curlys errorUnexpectedEof(ebuf, lexer);
             };
             if (pk2.tag == .rcurly) {
                 lexer.accept(pk2);
@@ -496,16 +493,16 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
             // following elements
             while (true) {
-                const entry_key = try parseExpr(ast, lexer) orelse {
+                const entry_key = try parseExpr(ast, ebuf, lexer) orelse {
                     const desc = "record key";
-                    break :curlys errorExpectedDesc(ast, lexer, desc);
+                    break :curlys errorExpectedDesc(ebuf, lexer, desc);
                 };
 
-                _ = try expectToken(ast, lexer, .colon);
+                _ = try expectToken(ebuf, lexer, .colon);
 
-                const entry_value = try parseExpr(ast, lexer) orelse {
+                const entry_value = try parseExpr(ast, ebuf, lexer) orelse {
                     const desc = "record value";
-                    break :curlys errorExpectedDesc(ast, lexer, desc);
+                    break :curlys errorExpectedDesc(ebuf, lexer, desc);
                 };
 
                 try entries.append(.{
@@ -513,7 +510,11 @@ fn parseAtom(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
                     .value = entry_value,
                 });
 
-                const next = try expectOneOf(ast, lexer, &.{ .comma, .rcurly });
+                const next = try expectOneOf(
+                    ebuf,
+                    lexer,
+                    &.{ .comma, .rcurly },
+                );
                 if (next.tag == .rcurly) break;
             }
 
@@ -532,17 +533,21 @@ const unary_prefixes: []const Token.Tag = &.{ .minus, .ampersand };
 
 const parsePrefixedName = unaryPrefixParser(unary_prefixes, parseName);
 
-fn parseApplication(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
+fn parseApplication(
+    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
+    lexer: *Lexer,
+) Error!?Ast.Node {
     const inner_parser = parsePrefixedName;
 
     // parse inner
-    const first = try inner_parser(ast, lexer) orelse {
+    const first = try inner_parser(ast, ebuf, lexer) orelse {
         return null;
     };
 
     // try to parse second inner expr; if successful, this is an application.
     // otherwise, just return the inner parser's result.
-    const second = try inner_parser(ast, lexer) orelse {
+    const second = try inner_parser(ast, ebuf, lexer) orelse {
         return first;
     };
 
@@ -552,7 +557,7 @@ fn parseApplication(ast: *Ast, lexer: *Lexer) ParseError!?Ast.Node {
 
     app.appendSliceAssumeCapacity(&.{ first, second });
 
-    while (try inner_parser(ast, lexer)) |cont| {
+    while (try inner_parser(ast, ebuf, lexer)) |cont| {
         try app.append(cont);
     }
 
@@ -594,13 +599,17 @@ const parseFuncStmt = binaryParser(
 const parseExpr = parseFuncStmt;
 
 /// a program is just a series of top level expressions
-fn parseProgram(ast: *Ast, lexer: *Lexer) ParseError!Ast.Node {
+fn parseProgram(
+    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
+    lexer: *Lexer,
+) Error!Ast.Node {
     const start_loc = lexer.nextLoc();
 
     var nodes = std.ArrayList(Ast.Node).init(ast.ally);
     defer nodes.deinit();
 
-    while (try parseExpr(ast, lexer)) |node| {
+    while (try parseExpr(ast, ebuf, lexer)) |node| {
         try nodes.append(node);
     }
 
@@ -609,35 +618,13 @@ fn parseProgram(ast: *Ast, lexer: *Lexer) ParseError!Ast.Node {
     });
 }
 
-pub const Result = union(enum) {
-    const Self = @This();
-
-    ok: Ast.Node,
-    fail,
-
-    fn filter(err: ParseError) Error!Self {
-        return switch (err) {
-            InvalidSyntaxError.InvalidSyntax => {
-                return .fail;
-            },
-            else => |filtered| {
-                return @as(Error, @errSetCast(filtered));
-            },
-        };
-    }
-
-    fn wrap(eu: ParseError!Ast.Node) Error!Self {
-        const val = eu catch |e| {
-            return filter(e);
-        };
-
-        return .{ .ok = val };
-    }
-};
-
 /// parse text into an ast node
 /// *remember to check ast for errors if there is a syntax error!*
-pub fn parse(ast: *Ast, source: fluent.Source) Error!Result {
+pub fn parse(
+    ast: *Ast,
+    ebuf: *SyntaxErrorBuf,
+    source: fluent.Source,
+) Error!Ast.Node {
     var lexer = Lexer.init(source);
-    return try Result.wrap(parseProgram(ast, &lexer));
+    return try parseProgram(ast, ebuf, &lexer);
 }

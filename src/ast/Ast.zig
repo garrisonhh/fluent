@@ -12,8 +12,6 @@ const Loc = fluent.Loc;
 const Ident = fluent.Ident;
 const Type = fluent.Type;
 
-pub const Error = @import("error.zig").Error;
-
 pub const Node = com.Ref(.ast_node, 32);
 const NodeMap = com.RefMap(Node, Expr);
 
@@ -108,7 +106,6 @@ pub const Expr = union(enum) {
 const Ast = @This();
 
 ally: Allocator,
-errors: std.ArrayListUnmanaged(Error) = .{},
 map: NodeMap = .{},
 
 // node metadata
@@ -126,9 +123,6 @@ pub fn deinit(self: *Ast) void {
     while (exprs.next()) |expr| expr.deinit(ally);
     self.map.deinit(ally);
 
-    for (self.errors.items) |e| e.deinit(ally);
-    self.errors.deinit(ally);
-
     self.locs.deinit(ally);
     self.types.deinit(ally);
 
@@ -137,16 +131,6 @@ pub fn deinit(self: *Ast) void {
 
 pub const RenderError = rendering.RenderError;
 pub const render = rendering.render;
-
-/// add an error to the error list
-pub fn addError(self: *Ast, e: Error) Allocator.Error!void {
-    try self.errors.append(self.ally, e);
-}
-
-/// all of the stored errors
-pub fn getErrors(self: *const Ast) []const Error {
-    return self.errors.items;
-}
 
 pub fn new(self: *Ast, loc: Loc, expr: Expr) Allocator.Error!Node {
     const ally = self.ally;

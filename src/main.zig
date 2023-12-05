@@ -6,7 +6,8 @@ const fluent = @import("mod.zig");
 
 pub const std_options = fluent.std_options;
 
-fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
+/// attempts to compile source, returning success
+fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !bool {
     var mason = blox.Mason.init(ally);
     defer mason.deinit();
 
@@ -18,31 +19,27 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
     var ast = fluent.Ast.init(ally);
     defer ast.deinit();
 
-    const root = switch (try fluent.parse(&ast, source)) {
-        .ok => |node| node,
-        .fail => {
-            for (ast.getErrors()) |err| {
-                const rendered = try err.render(&mason);
-                try mason.write(rendered, stderr, .{});
-            }
+    var parse_ebuf = fluent.SyntaxErrorBuf.init(ally);
+    defer parse_ebuf.deinit();
 
-            return;
+    const parse_res =
+        try parse_ebuf.filter(fluent.parse(&ast, &parse_ebuf, source));
+    const root = switch (parse_res) {
+        .payload => |x| x,
+        .err => |meta| {
+            const rendered = try meta.render(&mason);
+            try mason.write(rendered, stderr, .{});
+            return false;
         },
     };
 
     // analyze
-    // TODO programmatically create name for source
-    switch (try fluent.analyze(&ast, file.name, root)) {
-        .ok => {},
-        .fail => {
-            for (ast.getErrors()) |err| {
-                const rendered = try err.render(&mason);
-                try mason.write(rendered, stderr, .{});
-            }
-
-            return;
-        },
-    }
+    //    switch (try fluent.analyze(&ast, file.name, root)) {
+    //        .ok => {},
+    //        .fail => {
+    //            @panic("TODO");
+    //        },
+    //    }
 
     // render ast
     const ast_div = try ast.render(&mason, root);
@@ -66,6 +63,8 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !void {
 
     // jit assemble ssa
     try fluent.assemble(ally, ssa_object);
+
+    return true;
 }
 
 pub fn main() !void {
@@ -81,7 +80,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\fn f(a: i64, b: i64) i64 ->
+        \\fn x f(a: i64, b: i64) i64 ->
         \\  a + b
         \\
     ;
@@ -92,15 +91,15 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_writer);
     const stdout = bw.writer();
 
-    try debugCompile(ally, source, stdout);
+    if (try debugCompile(ally, source, stdout)) {
+        // attempt to run the function
+        const func_name = try fluent.env.nameFromStr("f");
+        const F = fn (i64, i64) callconv(.SysV) i64;
+        const func = fluent.env.getCompiled(func_name, F).?;
+        const res = func(32, 31);
 
-    // attempt to run the function
-    const func_name = try fluent.env.nameFromStr("f");
-    const F = fn (i64, i64) callconv(.SysV) i64;
-    const func = fluent.env.getCompiled(func_name, F).?;
-    const res = func(32, 31);
-
-    try stdout.print("function returned {}\n", .{res});
+        try stdout.print("function returned {}\n", .{res});
+    }
 
     try bw.flush();
 }
