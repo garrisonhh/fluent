@@ -9,6 +9,8 @@ const Lexer = @import("Lexer.zig");
 const Token = Lexer.Token;
 const rendering = @import("rendering.zig");
 
+// errors ======================================================================
+
 /// represents possible syntax errors
 pub const SyntaxErrorMeta = union(enum) {
     const Self = @This();

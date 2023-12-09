@@ -1,23 +1,26 @@
 //! forwarded namespaces for module
 
+// utilities
 const scoped_map = @import("lib/scoped_map.zig");
 pub const ScopedMap = scoped_map.ScopedMap;
 pub const ScopedMapUnmanaged = scoped_map.ScopedMapUnmanaged;
 pub const ErrorBuf = @import("lib/error_buf.zig").ErrorBuf;
 
-pub const Ast = @import("ast/Ast.zig");
-
-pub const Type = @import("types/type.zig").Type;
-pub const typer = @import("types/typer.zig");
+// subsystems
+pub const sources = @import("sources.zig");
+pub const Source = sources.Source;
+pub const Loc = sources.Loc;
 
 pub const env = @import("env/env.zig");
 pub const Ident = @import("env/idents.zig").Ident;
 pub const Name = @import("env/names.zig").Name;
 pub const Value = @import("env/value.zig").Value;
 
-pub const sources = @import("sources.zig");
-pub const Source = sources.Source;
-pub const Loc = sources.Loc;
+// compilation stages
+pub const Ast = @import("ast/Ast.zig");
+
+pub const Type = @import("types/type.zig").Type;
+pub const typer = @import("types/typer.zig");
 
 const parser = @import("parser/parser.zig");
 pub const SyntaxErrorMeta = parser.SyntaxErrorMeta;
@@ -26,8 +29,9 @@ pub const ParseError = parser.Error;
 pub const parse = parser.parse;
 
 const sema = @import("sema/sema.zig");
+pub const TypeErrorMeta = sema.TypeErrorMeta;
+pub const TypeErrorBuf = sema.TypeErrorBuf;
 pub const SemaError = sema.Error;
-pub const SemaErrorMeta = sema.SemaErrorMeta;
 pub const analyze = sema.analyze;
 
 pub const ssa = @import("ssa/ssa.zig");

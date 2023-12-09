@@ -22,9 +22,8 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !bool {
     var parse_ebuf = fluent.SyntaxErrorBuf.init(ally);
     defer parse_ebuf.deinit();
 
-    const parse_res =
-        try parse_ebuf.filter(fluent.parse(&ast, &parse_ebuf, source));
-    const root = switch (parse_res) {
+    const parse_res = fluent.parse(&ast, &parse_ebuf, source);
+    const root = switch (try parse_ebuf.filter(parse_res)) {
         .payload => |x| x,
         .err => |meta| {
             const rendered = try meta.render(&mason);
@@ -34,12 +33,18 @@ fn debugCompile(ally: Allocator, source: fluent.Source, writer: anytype) !bool {
     };
 
     // analyze
-    //    switch (try fluent.analyze(&ast, file.name, root)) {
-    //        .ok => {},
-    //        .fail => {
-    //            @panic("TODO");
-    //        },
-    //    }
+    var analyze_ebuf = fluent.TypeErrorBuf.init(ally);
+    defer analyze_ebuf.deinit();
+
+    const analyze_res = fluent.analyze(&ast, &analyze_ebuf, file.name, root);
+    switch (try analyze_ebuf.filter(analyze_res)) {
+        .payload => |x| x,
+        .err => |meta| {
+            const rendered = try meta.render(&mason);
+            try mason.write(rendered, stderr, .{});
+            return false;
+        },
+    }
 
     // render ast
     const ast_div = try ast.render(&mason, root);
@@ -80,7 +85,7 @@ pub fn main() !void {
 
     // test source
     const text =
-        \\fn x f(a: i64, b: i64) i64 ->
+        \\fn f(a: i64, b: i64) i64 ->
         \\  a + b
         \\
     ;

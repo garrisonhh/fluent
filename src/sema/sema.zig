@@ -9,16 +9,12 @@ const Value = fluent.Value;
 const Name = fluent.Name;
 const env = fluent.env;
 const typer = fluent.typer;
+const rendering = @import("rendering.zig");
 
-pub const Error = Allocator.Error;
-
-const SymbolTable = fluent.ScopedMap(Type.Id);
-
-const InvalidTypeError = error{InvalidType};
-const SemaError = Error || InvalidTypeError;
+// errors ======================================================================
 
 /// represents possible sema errors
-pub const SemaErrorMeta = union(enum) {
+pub const TypeErrorMeta = union(enum) {
     const Self = @This();
 
     const UnknownName = struct {
@@ -44,23 +40,21 @@ pub const SemaErrorMeta = union(enum) {
     expected: Expected,
     expected_matching: ExpectedMatching,
 
-    pub fn deinit(self: Self, ally: Allocator) void {
-        _ = ally;
-        switch (self) {
-            else => {},
-        }
-    }
+    pub const render = rendering.renderTypeError;
 };
 
-/// generate an ast error and return error.InvalidType
-fn invalidType(ast: *Ast, meta: SemaErrorMeta) SemaError {
-    try ast.addError(.{ .semantic = meta });
-    return SemaError.InvalidType;
-}
+pub const TypeErrorBuf = fluent.ErrorBuf(TypeErrorMeta, error.InvalidType);
+const TypeError = TypeErrorBuf.Error;
 
-/// generate an unknown name error
-fn unknownName(ast: *Ast, st: *SymbolTable, loc: Loc, name: Name) SemaError {
-    return invalidType(ast, .{
+pub const Error = Allocator.Error || TypeError;
+
+fn errorUnknownName(
+    ebuf: *TypeErrorBuf,
+    st: *SymbolTable,
+    loc: Loc,
+    name: Name,
+) TypeError {
+    return ebuf.err(.{
         .unknown_name = .{
             .loc = loc,
             .name = name,
@@ -70,10 +64,15 @@ fn unknownName(ast: *Ast, st: *SymbolTable, loc: Loc, name: Name) SemaError {
 }
 
 /// check a node and expect it to match or subclass the expected type
-fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!void {
+fn expect(
+    ast: *Ast,
+    ebuf: *TypeErrorBuf,
+    node: Ast.Node,
+    expected: Type.Id,
+) TypeError!void {
     const actual = ast.getType(node);
     if (!typer.isCompatible(actual, expected)) {
-        return invalidType(ast, .{
+        return ebuf.err(.{
             .expected = .{
                 .loc = ast.getLoc(node),
                 .expected = expected,
@@ -83,33 +82,19 @@ fn expect(ast: *Ast, node: Ast.Node, expected: Type.Id) SemaError!void {
     }
 }
 
-/// check node and expects it to match the provided node
-fn expectMatching(
-    ast: *Ast,
-    node: Ast.Node,
-    to_match: Ast.Node,
-) SemaError!void {
-    const actual = ast.getType(node);
-    const expected = ast.getType(to_match);
-    if (!typer.isCompatible(actual, expected)) {
-        return invalidType(ast, .{
-            .expected_matching = .{
-                .expected = expected,
-                .found = actual,
-                .expected_loc = ast.getLoc(to_match),
-                .found_loc = ast.getLoc(node),
-            },
-        });
-    }
-}
+// analysis ====================================================================
+
+const SymbolTable = fluent.ScopedMap(Type.Id);
 
 fn analyzeUnary(
     ast: *Ast,
+    ebuf: *TypeErrorBuf,
     st: *SymbolTable,
     node: Ast.Node,
     meta: Ast.Expr.Unary,
-) SemaError!Type.Id {
+) Error!Type.Id {
     _ = ast;
+    _ = ebuf;
     _ = st;
     _ = node;
     _ = meta;
@@ -131,11 +116,12 @@ fn dirtyEvilHackAnalyzePredefType(
 
 fn analyzeBinary(
     ast: *Ast,
+    ebuf: *TypeErrorBuf,
     st: *SymbolTable,
     node: Ast.Node,
     meta: Ast.Expr.Binary,
     expects: Type.Id,
-) SemaError!Type.Id {
+) Error!Type.Id {
     return switch (meta.op) {
         // arithmetic
         .add,
@@ -144,20 +130,20 @@ fn analyzeBinary(
         .divide,
         .modulus,
         => arith: {
-            const lhs_t = try analyzeExpr(ast, st, meta.lhs, expects);
-            const rhs_t = try analyzeExpr(ast, st, meta.rhs, expects);
+            const lhs_t = try analyzeExpr(ast, ebuf, st, meta.lhs, expects);
+            const rhs_t = try analyzeExpr(ast, ebuf, st, meta.rhs, expects);
             const t = try typer.merge(&.{ lhs_t, rhs_t });
             _ = try ast.setType(node, t);
 
-            try expect(ast, node, expects);
+            try expect(ast, ebuf, node, expects);
 
             break :arith t;
         },
 
         // conditions
         .eq => any: {
-            _ = try analyzeExpr(ast, st, meta.lhs, typer.pre(.bool));
-            _ = try analyzeExpr(ast, st, meta.rhs, typer.pre(.bool));
+            _ = try analyzeExpr(ast, ebuf, st, meta.lhs, typer.pre(.bool));
+            _ = try analyzeExpr(ast, ebuf, st, meta.rhs, typer.pre(.bool));
             break :any try ast.setType(node, typer.pre(.bool));
         },
 
@@ -170,11 +156,13 @@ fn analyzeBinary(
 
 fn analyzeCall(
     ast: *Ast,
+    ebuf: *TypeErrorBuf,
     st: *SymbolTable,
     node: Ast.Node,
     call: []const Ast.Node,
-) SemaError!Type.Id {
+) Error!Type.Id {
     _ = ast;
+    _ = ebuf;
     _ = st;
     _ = node;
     _ = call;
@@ -183,11 +171,13 @@ fn analyzeCall(
 
 fn analyzeRecord(
     ast: *Ast,
+    ebuf: *TypeErrorBuf,
     st: *SymbolTable,
     node: Ast.Node,
     entries: []const Ast.Expr.KV,
-) SemaError!Type.Id {
+) Error!Type.Id {
     _ = ast;
+    _ = ebuf;
     _ = st;
     _ = node;
     _ = entries;
@@ -198,10 +188,11 @@ fn analyzeRecord(
 /// so don't worry too much about making it correct
 fn analyzeFn(
     ast: *Ast,
+    ebuf: *TypeErrorBuf,
     st: *SymbolTable,
     node: Ast.Node,
     meta: Ast.Expr.Fn,
-) SemaError!Type.Id {
+) Error!Type.Id {
     const ally = ast.ally;
 
     // name
@@ -231,7 +222,7 @@ fn analyzeFn(
 
     // analyze return type and body
     const return_type = try dirtyEvilHackAnalyzePredefType(ast, meta.returns);
-    _ = try analyzeExpr(ast, st, meta.body, return_type);
+    _ = try analyzeExpr(ast, ebuf, st, meta.body, return_type);
 
     const func_type = try typer.put(.{
         .@"fn" = .{
@@ -255,10 +246,11 @@ fn analyzeFn(
 /// TODO 'quote level' idea?
 fn analyzeExpr(
     ast: *Ast,
+    ebuf: *TypeErrorBuf,
     st: *SymbolTable,
     node: Ast.Node,
     expects: Type.Id,
-) SemaError!Type.Id {
+) Error!Type.Id {
     const actual: Type.Id = switch (ast.get(node).*) {
         .unit => try ast.setType(node, typer.pre(.unit)),
         .bool => try ast.setType(node, typer.pre(.bool)),
@@ -280,22 +272,22 @@ fn analyzeExpr(
                     break :t t;
                 }
 
-                return unknownName(ast, st, ast.getLoc(node), rel_name);
+                return errorUnknownName(ebuf, st, ast.getLoc(node), rel_name);
             };
 
             break :ident try ast.setType(node, t);
         },
 
-        .unary => |meta| try analyzeUnary(ast, st, node, meta),
-        .binary => |meta| try analyzeBinary(ast, st, node, meta, expects),
-        .record => |entries| try analyzeRecord(ast, st, node, entries),
-        .call => |call| try analyzeCall(ast, st, node, call),
-        .@"fn" => |meta| try analyzeFn(ast, st, node, meta),
+        .unary => |meta| try analyzeUnary(ast, ebuf, st, node, meta),
+        .binary => |meta| try analyzeBinary(ast, ebuf, st, node, meta, expects),
+        .record => |entries| try analyzeRecord(ast, ebuf, st, node, entries),
+        .call => |call| try analyzeCall(ast, ebuf, st, node, call),
+        .@"fn" => |meta| try analyzeFn(ast, ebuf, st, node, meta),
 
         .@"if" => |@"if"| @"if": {
-            _ = try analyzeExpr(ast, st, @"if".cond, typer.pre(.bool));
-            const if_true_t = try analyzeExpr(ast, st, @"if".if_true, expects);
-            const if_false_t = try analyzeExpr(ast, st, @"if".if_false, expects);
+            _ = try analyzeExpr(ast, ebuf, st, @"if".cond, typer.pre(.bool));
+            const if_true_t = try analyzeExpr(ast, ebuf, st, @"if".if_true, expects);
+            const if_false_t = try analyzeExpr(ast, ebuf, st, @"if".if_false, expects);
             const if_type = try typer.merge(&.{
                 if_true_t,
                 if_false_t,
@@ -308,7 +300,7 @@ fn analyzeExpr(
             const prog_type = try ast.setType(node, typer.pre(.unit));
 
             for (prog) |child| {
-                _ = try analyzeExpr(ast, st, child, typer.pre(.unit));
+                _ = try analyzeExpr(ast, ebuf, st, child, typer.pre(.unit));
             }
 
             break :prog prog_type;
@@ -317,26 +309,20 @@ fn analyzeExpr(
         else => |expr| std.debug.panic("TODO analyze {s}", .{@tagName(expr)}),
     };
 
-    try expect(ast, node, expects);
+    try expect(ast, ebuf, node, expects);
 
     return actual;
 }
 
-pub const Result = enum { ok, fail };
-
 /// semantically analyze an expression
-pub fn analyze(ast: *Ast, scope: Name, node: Ast.Node) Error!Result {
+pub fn analyze(
+    ast: *Ast,
+    ebuf: *TypeErrorBuf,
+    scope: Name,
+    node: Ast.Node,
+) Error!void {
     var st = SymbolTable.init(ast.ally, scope);
     defer st.deinit();
 
-    if (analyzeExpr(ast, &st, node, typer.pre(.any))) |_| {
-        return .ok;
-    } else |e| switch (e) {
-        InvalidTypeError.InvalidType => {
-            return .fail;
-        },
-        else => |filtered| {
-            return @as(Error, @errSetCast(filtered));
-        },
-    }
+    _ = try analyzeExpr(ast, ebuf, &st, node, typer.pre(.any));
 }

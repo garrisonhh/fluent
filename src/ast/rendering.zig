@@ -7,8 +7,6 @@ const Loc = fluent.Loc;
 const Type = fluent.Type;
 const typer = fluent.typer;
 
-pub const RenderError = blox.Error || std.fmt.AllocPrintError;
-
 const span = blox.BoxOptions{ .direction = .right };
 
 const theme = struct {
@@ -20,99 +18,12 @@ const theme = struct {
     const err = c(.bright, .black);
 };
 
-// errors ======================================================================
-
-const ErrorScope = enum {
-    syntax,
-    type,
-};
-
-/// adds tag to error description
-fn errorDesc(
-    mason: *blox.Mason,
-    scope: ErrorScope,
-    desc: blox.Div,
-) RenderError!blox.Div {
-    const ally = mason.ally;
-
-    const err_name = try std.fmt.allocPrint(ally, "{s} error", .{
-        @tagName(scope),
-    });
-    defer ally.free(err_name);
-
-    return try mason.newBox(&.{
-        try mason.newPre("[", .{}),
-        try mason.newPre(err_name, .{ .fg = theme.err }),
-        try mason.newPre("] ", .{}),
-        desc,
-    }, span);
-}
-
-/// an error with a description and a location
-fn simpleError(
-    mason: *blox.Mason,
-    scope: ErrorScope,
-    loc: Loc,
-    comptime fmt: []const u8,
-    args: anytype,
-) RenderError!blox.Div {
-    const ally = mason.ally;
-    const text = try std.fmt.allocPrint(ally, fmt, args);
-    defer ally.free(text);
-
-    return try mason.newBox(&.{
-        try errorDesc(mason, scope, try mason.newPre(text, .{})),
-        try loc.render(mason),
-    }, .{});
-}
-
-fn renderSemaError(
-    mason: *blox.Mason,
-    meta: fluent.SemaErrorMeta,
-) RenderError!blox.Div {
-    return switch (meta) {
-        .unknown_name => |unk| try mason.newBox(&.{
-            try errorDesc(mason, .type, try mason.newBox(&.{
-                try mason.newPre("unknown name ", .{}),
-                try fluent.env.renderName(mason, unk.name),
-                try mason.newPre(" in scope ", .{}),
-                try fluent.env.renderName(mason, unk.scope),
-            }, span)),
-            try unk.loc.render(mason),
-        }, .{}),
-
-        .expected => |exp| try mason.newBox(&.{
-            try errorDesc(mason, .type, try mason.newBox(&.{
-                try mason.newPre("expected ", .{}),
-                try typer.render(mason, exp.expected),
-                try mason.newPre(", found ", .{}),
-                try typer.render(mason, exp.found),
-            }, span)),
-            try exp.loc.render(mason),
-        }, .{}),
-
-        .expected_matching => |exp| try mason.newBox(&.{
-            try errorDesc(mason, .type, try mason.newBox(&.{
-                try mason.newPre("expected ", .{}),
-                try typer.render(mason, exp.expected),
-                try mason.newPre(", found ", .{}),
-                try typer.render(mason, exp.found),
-            }, span)),
-            try exp.found_loc.render(mason),
-            try mason.newPre("this would match the expression here", .{}),
-            try exp.expected_loc.render(mason),
-        }, .{}),
-    };
-}
-
-// ast =========================================================================
-
 fn renderFieldData(
     self: *const Ast,
     mason: *blox.Mason,
     comptime T: type,
     value: T,
-) RenderError!blox.Div {
+) blox.Error!blox.Div {
     const ally = mason.ally;
     return switch (T) {
         // literals
@@ -176,7 +87,7 @@ pub fn render(
     self: *const Ast,
     mason: *blox.Mason,
     node: Ast.Node,
-) RenderError!blox.Div {
+) blox.Error!blox.Div {
     const indent = try mason.newSpacer(2, 0, .{});
     const space = try mason.newSpacer(1, 0, .{});
 
