@@ -89,7 +89,7 @@ pub fn drop(name: Name) ?Name {
     if (buf.len == 0) return null;
 
     // guaranteed to by intern behavior
-    return set.get(buf).?;
+    return set.get(buf[0 .. buf.len - 1]).?;
 }
 
 /// adds an identifier to the name
@@ -123,7 +123,7 @@ test "name-interning" {
     const hello_world = try intern(ally, &.{ hello, world });
     const hello_god = try intern(ally, &.{ hello, god });
     const hello_world2 = try push(ally, hello_name, world);
-    const hello_name2 = try drop(ally, hello_god) orelse {
+    const hello_name2 = drop(hello_god) orelse {
         return error.TestFailure;
     };
 

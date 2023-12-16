@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) void {
     tests.addOptions("options", options);
     tests.addModule("common", common);
     tests.addModule("blox", blox);
-    exe.addModule("x86-jit", @"x86-jit");
+    tests.addModule("x86-jit", @"x86-jit");
 
     const test_cmd = b.addRunArtifact(tests);
     const test_step = b.step("test", "run unit tests");
