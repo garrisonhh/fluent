@@ -128,6 +128,17 @@ fn lowerExpr(
             };
         },
 
+        .unary => |un| un: {
+            const arg = try lowerExpr(ast, st, block, un.child);
+
+            const inst: ssa.Instruction = switch (un.op) {
+                .negate => .{ .negate = arg },
+
+                else => @panic("TODO"),
+            };
+
+            break :un try block.*.op(t, inst);
+        },
         .binary => |bin| bin: {
             const args = [2]ssa.Local{
                 try lowerExpr(ast, st, block, bin.lhs),

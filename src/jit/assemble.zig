@@ -228,12 +228,11 @@ fn assembleOp(
             const bytes = try fluent.env.get(val).asBytes(bb.arena_ally);
 
             // constant expects a little-endian u64
-            const const_bytes = try bb.arena_ally.alloc(u8, 8);
-            @memset(const_bytes, 0);
-            @memcpy(const_bytes[0..bytes.len], bytes);
-            try bb.op(.{
-                .constant = .{ .bytes = const_bytes, .dst = .rax },
-            });
+            var value: u64 = 0;
+            const value_ptr: []u8 = @as(*[8]u8, @ptrCast(&value));
+            @memcpy(value_ptr[0..bytes.len], bytes);
+
+            try bb.op(.{ .constant = .{ .value = value, .dst = .rax } });
 
             try movToLocal(locmap, bb, .{ .reg = .rax }, op.dest);
         },
@@ -251,6 +250,11 @@ fn assembleOp(
                 .src = .rdx,
                 .dst = .rax,
             }));
+            try movToLocal(locmap, bb, .{ .reg = .rax }, op.dest);
+        },
+        .negate => |arg| {
+            try movLocalTo(locmap, bb, arg, .{ .reg = .rax });
+            try bb.op(.{ .neg = .rax });
             try movToLocal(locmap, bb, .{ .reg = .rax }, op.dest);
         },
 

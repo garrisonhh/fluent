@@ -45,6 +45,7 @@ pub const Instruction = union(enum) {
     mul: [2]Local,
     div: [2]Local,
     mod: [2]Local,
+    negate: Local,
 
     eq: [2]Local,
 

@@ -73,6 +73,11 @@ fn renderOp(
             break :call try mason.newBox(divs.items, span);
         },
 
+        .negate => |arg| try mason.newBox(&.{
+            inst_tag,
+            try renderLocal(mason, func, arg),
+        }, span),
+
         .add,
         .sub,
         .mul,

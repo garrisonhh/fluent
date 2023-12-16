@@ -86,21 +86,6 @@ fn expect(
 
 const SymbolTable = fluent.ScopedMap(Type.Id);
 
-fn analyzeUnary(
-    ast: *Ast,
-    ebuf: *TypeErrorBuf,
-    st: *SymbolTable,
-    node: Ast.Node,
-    meta: Ast.Expr.Unary,
-) Error!Type.Id {
-    _ = ast;
-    _ = ebuf;
-    _ = st;
-    _ = node;
-    _ = meta;
-    @panic("TODO analyze unary op");
-}
-
 /// TODO remove this and do it correctly once I can eval types
 fn dirtyEvilHackAnalyzePredefType(
     ast: *Ast,
@@ -112,6 +97,23 @@ fn dirtyEvilHackAnalyzePredefType(
     const type_name = try env.name(&.{type_ident});
     const type_value = env.lookup(type_name).?;
     return env.get(type_value).type;
+}
+
+fn analyzeUnary(
+    ast: *Ast,
+    ebuf: *TypeErrorBuf,
+    st: *SymbolTable,
+    node: Ast.Node,
+    meta: Ast.Expr.Unary,
+    expects: Type.Id,
+) Error!Type.Id {
+    return switch (meta.op) {
+        .negate => neg: {
+            const t = try analyzeExpr(ast, ebuf, st, meta.child, expects);
+            break :neg try ast.setType(node, t);
+        },
+        .addr => @panic("TODO analyze addr op"),
+    };
 }
 
 fn analyzeBinary(
@@ -133,11 +135,7 @@ fn analyzeBinary(
             const lhs_t = try analyzeExpr(ast, ebuf, st, meta.lhs, expects);
             const rhs_t = try analyzeExpr(ast, ebuf, st, meta.rhs, expects);
             const t = try typer.merge(&.{ lhs_t, rhs_t });
-            _ = try ast.setType(node, t);
-
-            try expect(ast, ebuf, node, expects);
-
-            break :arith t;
+            break :arith try ast.setType(node, t);
         },
 
         // conditions
@@ -278,7 +276,7 @@ fn analyzeExpr(
             break :ident try ast.setType(node, t);
         },
 
-        .unary => |meta| try analyzeUnary(ast, ebuf, st, node, meta),
+        .unary => |meta| try analyzeUnary(ast, ebuf, st, node, meta, expects),
         .binary => |meta| try analyzeBinary(ast, ebuf, st, node, meta, expects),
         .record => |entries| try analyzeRecord(ast, ebuf, st, node, entries),
         .call => |call| try analyzeCall(ast, ebuf, st, node, call),
