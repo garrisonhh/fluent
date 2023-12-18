@@ -67,6 +67,7 @@ fn succeeds(
     };
 }
 
+// int literals
 usingnamespace succeeds("fn f() i8 -> 42", "f", i8, 42);
 usingnamespace succeeds("fn f() i16 -> 42", "f", i16, 42);
 usingnamespace succeeds("fn f() i32 -> 42", "f", i32, 42);
@@ -75,3 +76,27 @@ usingnamespace succeeds("fn f() i8 -> -42", "f", i8, -42);
 usingnamespace succeeds("fn f() i16 -> -42", "f", i16, -42);
 usingnamespace succeeds("fn f() i32 -> -42", "f", i32, -42);
 usingnamespace succeeds("fn f() i64 -> -42", "f", i64, -42);
+
+usingnamespace succeeds("fn f() i8 -> 0", "f", i8, 0);
+usingnamespace succeeds("fn f() i16 -> 0", "f", i16, 0);
+usingnamespace succeeds("fn f() i32 -> 0", "f", i32, 0);
+usingnamespace succeeds("fn f() i64 -> 0", "f", i64, 0);
+// TODO make these work
+// usingnamespace succeeds("fn f() i8 -> -128", "f", i8, -128);
+// usingnamespace succeeds("fn f() i16 -> -32768", "f", i16, -32768);
+// usingnamespace succeeds("fn f() i32 -> -2147483648", "f", i32, -2147483648);
+// usingnamespace succeeds("fn f() i64 -> -9223372036854775808", "f", i64, -9223372036854775808);
+usingnamespace succeeds("fn f() i8 -> 127", "f", i8, 127);
+usingnamespace succeeds("fn f() i16 -> 32767", "f", i16, 32767);
+usingnamespace succeeds("fn f() i32 -> 2147483647", "f", i32, 2147483647);
+usingnamespace succeeds("fn f() i64 -> 9223372036854775807", "f", i64, 9223372036854775807);
+
+// int addition
+usingnamespace succeeds("fn f() i8 -> 16 + 26", "f", i8, 42);
+usingnamespace succeeds("fn f() i16 -> 16 + 26", "f", i16, 42);
+usingnamespace succeeds("fn f() i32 -> 16 + 26", "f", i32, 42);
+usingnamespace succeeds("fn f() i64 -> 16 + 26", "f", i64, 42);
+usingnamespace succeeds("fn f() i8 -> -16 + -26", "f", i8, -42);
+usingnamespace succeeds("fn f() i16 -> -16 + -26", "f", i16, -42);
+usingnamespace succeeds("fn f() i32 -> -16 + -26", "f", i32, -42);
+usingnamespace succeeds("fn f() i64 -> -16 + -26", "f", i64, -42);
